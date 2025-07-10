@@ -79,3 +79,8 @@ A new profile dialog
 
 Indexes information dialog
 ![indexes info dialog](./images/global_index_info.png)
+
+---
+
+For details on contributing or extending DynamoIt see the
+[Developer Guide](developer-guide.md).
