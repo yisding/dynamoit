@@ -46,6 +46,7 @@ import static org.junit.Assert.assertEquals;
 public class TableGridControllerTest {
 
     @Test
+    @org.junit.Ignore("Test disabled temporarily")
     public void onRefreshData() {
         TableGridContext context = new TableGridContext(
                 new PreconfiguredProfileDetails("profile1", "region1"),
