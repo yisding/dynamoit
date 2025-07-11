@@ -80,6 +80,10 @@
                         -Dglass.platform=Monocle
                         -Dmonocle.platform=Headless
                     </argLine>
+                    <!-- Exclude E2E tests from regular test runs -->
+                    <excludes>
+                        <exclude>**/e2e/**/*E2ETest.java</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
             <plugin>
@@ -212,6 +216,40 @@
                 <destination.name>${project.name}.app</destination.name>
             </properties>
         </profile>
+        <profile>
+            <id>e2e-parallel</id>
+            <activation>
+                <property>
+                    <name>e2e.parallel</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <parallel>classes</parallel>
+                            <forkCount>4</forkCount>
+                            <reuseForks>true</reuseForks>
+                            <argLine>
+                                --add-opens java.base/java.lang=ALL-UNNAMED
+                                --add-opens java.base/java.util=ALL-UNNAMED
+                                --add-opens java.base/java.util.concurrent=ALL-UNNAMED
+                                --add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED
+                                --add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED
+                                --add-opens javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED
+                                -Dtestfx.headless=true
+                                -Dprism.order=sw
+                                -Djava.awt.headless=true
+                                -Dglass.platform=Monocle
+                                -Dmonocle.platform=Headless
+                            </argLine>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
     <dependencies>
@@ -320,7 +358,7 @@
         <dependency>
             <groupId>org.testfx</groupId>
             <artifactId>openjfx-monocle</artifactId>
-            <version>jdk-12.0.1+2</version>
+            <version>21.0.2</version>
             <scope>test</scope>
         </dependency>
         
@@ -376,8 +414,17 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
-            <version>2.15.2</version>
-            <scope>test</scope>
+            <version>2.19.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>2.19.1</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.19.1</version>
         </dependency>
 
 

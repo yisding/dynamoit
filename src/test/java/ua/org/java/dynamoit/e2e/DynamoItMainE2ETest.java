@@ -18,6 +18,7 @@
 package ua.org.java.dynamoit.e2e;
 
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import javafx.scene.control.Button;
 import javafx.scene.input.KeyCode;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxRobot;
@@ -41,14 +42,24 @@ class DynamoItMainE2ETest extends DynamoItE2ETestBase {
         waitForUi();
         
         // Create a local profile pointing to our test DynamoDB
-        robot.clickOn("Profiles").clickOn("Add Local Profile");
+        try {
+            robot.clickOn(robot.lookup((Button button) -> button.getTooltip() != null && 
+                button.getTooltip().getText().contains("Add a new profile")).queryButton());
+        } catch (Exception e) {
+            // If tooltip selector doesn't work, try clicking the first button in the toolbar
+            robot.clickOn("Button");
+        }
+        waitForUi();
+        
+        // Click the "Local" tab in the dialog
+        robot.clickOn("Local");
         waitForUi();
         
         // Fill in the local profile dialog
         robot.write("test-local");  // Profile name
         robot.press(KeyCode.TAB);
         robot.write(dynamoDbEndpoint);  // Endpoint URL
-        robot.clickOn("Save");
+        robot.clickOn("OK");
         waitForUi();
         
         // Select the local profile
@@ -216,13 +227,23 @@ class DynamoItMainE2ETest extends DynamoItE2ETestBase {
     private void setupLocalProfile(FxRobot robot) throws InterruptedException {
         // Check if profile already exists, if not create it
         if (robot.lookup("test-local").tryQuery().isEmpty()) {
-            robot.clickOn("Profiles").clickOn("Add Local Profile");
+            try {
+                robot.clickOn(robot.lookup((Button button) -> button.getTooltip() != null && 
+                    button.getTooltip().getText().contains("Add a new profile")).queryButton());
+            } catch (Exception e) {
+                // If tooltip selector doesn't work, try clicking the first button in the toolbar
+                robot.clickOn("Button");
+            }
+            waitForUi();
+            
+            // Click the "Local" tab in the dialog
+            robot.clickOn("Local");
             waitForUi();
             
             robot.write("test-local");
             robot.press(KeyCode.TAB);
             robot.write(dynamoDbEndpoint);
-            robot.clickOn("Save");
+            robot.clickOn("OK");
             waitForUi();
         }
         

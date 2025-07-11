@@ -28,9 +28,13 @@ import org.junit.platform.suite.api.Suite;
  */
 @Suite
 @SelectClasses({
+    SmokeE2ETest.class,
     DynamoItMainE2ETest.class,
     ProfileManagementE2ETest.class,
-    TableOperationsE2ETest.class
+    TableOperationsE2ETest.class,
+    CrudOperationsE2ETest.class,
+    SearchAndFilterE2ETest.class,
+    AdvancedTableOperationsE2ETest.class
 })
 public class DynamoItE2ETestSuite {
     // This class is used only as a holder for the above annotations

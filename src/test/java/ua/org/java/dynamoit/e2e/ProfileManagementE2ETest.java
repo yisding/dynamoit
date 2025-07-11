@@ -17,6 +17,7 @@
 
 package ua.org.java.dynamoit.e2e;
 
+import javafx.scene.control.Button;
 import javafx.scene.input.KeyCode;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxRobot;
@@ -34,19 +35,26 @@ class ProfileManagementE2ETest extends DynamoItE2ETestBase {
         
         waitForUi();
         
-        // Navigate to profile management
-        robot.clickOn("Profiles");
+        // Click the "Add" button to open the new profile dialog
+        try {
+            robot.clickOn(robot.lookup((Button button) -> button.getTooltip() != null && 
+                button.getTooltip().getText().contains("Add a new profile")).queryButton());
+        } catch (Exception e) {
+            // If tooltip selector doesn't work, try clicking the first button in the toolbar
+            robot.clickOn("Button");
+        }
         waitForUi();
         
-        // Create a new local profile
-        robot.clickOn("Add Local Profile");
+        // Click the "Local" tab in the dialog
+        robot.clickOn("Local");
         waitForUi();
         
         // Fill in profile details
+        robot.clickOn(".text-field");
         robot.write("e2e-test-profile");
         robot.press(KeyCode.TAB);
         robot.write(dynamoDbEndpoint);
-        robot.clickOn("Save");
+        robot.clickOn("OK");
         waitForUi();
         
         // Verify profile appears in the list
@@ -143,14 +151,24 @@ class ProfileManagementE2ETest extends DynamoItE2ETestBase {
         waitForUi();
         
         // Try to create a profile with invalid endpoint
-        robot.clickOn("Profiles");
-        robot.clickOn("Add Local Profile");
+        try {
+            robot.clickOn(robot.lookup((Button button) -> button.getTooltip() != null && 
+                button.getTooltip().getText().contains("Add a new profile")).queryButton());
+        } catch (Exception e) {
+            // If tooltip selector doesn't work, try clicking the first button in the toolbar
+            robot.clickOn("Button");
+        }
         waitForUi();
         
+        // Click the "Local" tab in the dialog
+        robot.clickOn("Local");
+        waitForUi();
+        
+        robot.clickOn(".text-field");
         robot.write("invalid-profile");
         robot.press(KeyCode.TAB);
         robot.write("http://invalid-endpoint:9999");
-        robot.clickOn("Save");
+        robot.clickOn("OK");
         waitForUi();
         
         // Select the invalid profile
@@ -164,14 +182,24 @@ class ProfileManagementE2ETest extends DynamoItE2ETestBase {
     }
 
     private void createTestProfile(FxRobot robot, String profileName) throws InterruptedException {
-        robot.clickOn("Profiles");
-        robot.clickOn("Add Local Profile");
+        // Click the "Add" button - try different selectors
+        try {
+            robot.clickOn(robot.lookup((Button button) -> button.getTooltip() != null && 
+                button.getTooltip().getText().contains("Add a new profile")).queryButton());
+        } catch (Exception e) {
+            // If tooltip selector doesn't work, try clicking the first button in the toolbar
+            robot.clickOn("Button");
+        }
+        waitForUi();
+        
+        // Click the "Local" tab in the dialog
+        robot.clickOn("Local");
         waitForUi();
         
         robot.write(profileName);
         robot.press(KeyCode.TAB);
         robot.write(dynamoDbEndpoint);
-        robot.clickOn("Save");
+        robot.clickOn("OK");
         waitForUi();
     }
 }

@@ -23,7 +23,6 @@ import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.model.*;
-import javafx.application.Platform;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,13 +30,13 @@ import org.junit.jupiter.api.TestInstance;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testfx.framework.junit5.Start;
+import org.testfx.framework.junit5.ApplicationTest;
 import ua.org.java.dynamoit.DynamoItApp;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Base class for DynamoIt End-to-End tests.
@@ -45,10 +44,12 @@ import java.util.concurrent.TimeUnit;
  */
 @Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-public abstract class DynamoItE2ETestBase {
+public abstract class DynamoItE2ETestBase extends ApplicationTest {
+
+    protected String testProfileName = "test-local-" + this.getClass().getSimpleName();
 
     @Container
-    protected static final GenericContainer<?> DYNAMO_DB_LOCAL = new GenericContainer<>("amazon/dynamodb-local:latest")
+    protected final GenericContainer<?> DYNAMO_DB_LOCAL = new GenericContainer<>("amazon/dynamodb-local:latest")
             .withExposedPorts(8000)
             .withCommand("-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory");
 
@@ -87,28 +88,16 @@ public abstract class DynamoItE2ETestBase {
             cleanupTestTables();
             dynamoDbClient.shutdown();
         }
+        DYNAMO_DB_LOCAL.stop();
     }
 
-    @Start
-    void startApplication(Stage stage) throws Exception {
-        // Ensure JavaFX is initialized properly
-        CountDownLatch latch = new CountDownLatch(1);
-        Platform.runLater(() -> {
-            try {
-                new DynamoItApp().start(stage);
-                latch.countDown();
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to start DynamoIt application", e);
-            }
-        });
+    @Override
+    public void start(Stage stage) throws Exception {
+        // Start the DynamoIt application
+        new DynamoItApp().start(stage);
         
-        // Wait for application to start with timeout
-        if (!latch.await(30, TimeUnit.SECONDS)) {
-            throw new RuntimeException("Application failed to start within 30 seconds");
-        }
-        
-        // Give the UI a moment to fully initialize
-        Thread.sleep(2000);
+        // Give the UI more time to fully initialize and render
+        Thread.sleep(5000);  // Increased from 2000ms to 5000ms
     }
 
     /**
@@ -237,7 +226,7 @@ public abstract class DynamoItE2ETestBase {
      * Utility method to wait for UI operations to complete
      */
     protected void waitForUi() throws InterruptedException {
-        Thread.sleep(500);
+        Thread.sleep(1500);  // Increased from 500ms to 1500ms
     }
 
     /**
@@ -249,5 +238,93 @@ public abstract class DynamoItE2ETestBase {
                 .withKey(key);
         GetItemResult result = dynamoDbClient.getItem(request);
         return result.getItem();
+    }
+
+    /**
+     * Put an item directly into the database for test setup
+     */
+    protected void putItemInDb(String tableName, Map<String, AttributeValue> item) {
+        try {
+            dynamoDbClient.putItem(tableName, item);
+        } catch (Exception e) {
+            // Ignore errors in test setup
+        }
+    }
+
+    /**
+     * Delete an item directly from the database for test cleanup
+     */
+    protected void deleteItemFromDb(String tableName, Map<String, AttributeValue> key) {
+        try {
+            DeleteItemRequest request = new DeleteItemRequest()
+                    .withTableName(tableName)
+                    .withKey(key);
+            dynamoDbClient.deleteItem(request);
+        } catch (Exception e) {
+            // Ignore errors in test cleanup
+        }
+    }
+
+    /**
+     * Get all items from a table (for verification)
+     */
+    protected java.util.List<Map<String, AttributeValue>> getAllItemsFromDb(String tableName) {
+        try {
+            ScanRequest scanRequest = new ScanRequest().withTableName(tableName);
+            ScanResult result = dynamoDbClient.scan(scanRequest);
+            return result.getItems();
+        } catch (Exception e) {
+            return java.util.Collections.emptyList();
+        }
+    }
+
+    /**
+     * Wait for UI with custom timeout
+     */
+    protected void waitForUi(long milliseconds) throws InterruptedException {
+        Thread.sleep(milliseconds);
+    }
+
+    /**
+     * Create a test user with specified attributes
+     */
+    protected void createTestUser(String id, String name, String email, String age) {
+        Map<String, AttributeValue> user = new HashMap<>();
+        user.put("id", new AttributeValue(id));
+        user.put("name", new AttributeValue(name));
+        if (email != null) user.put("email", new AttributeValue(email));
+        if (age != null) user.put("age", new AttributeValue().withN(age));
+        putItemInDb("users", user);
+    }
+
+    /**
+     * Create a test product with specified attributes
+     */
+    protected void createTestProduct(String productId, String category, String name, String price) {
+        Map<String, AttributeValue> product = new HashMap<>();
+        product.put("productId", new AttributeValue(productId));
+        product.put("category", new AttributeValue(category));
+        product.put("name", new AttributeValue(name));
+        if (price != null) product.put("price", new AttributeValue().withN(price));
+        putItemInDb("products", product);
+    }
+
+    /**
+     * Verify that an item exists in the database with expected values
+     */
+    protected void verifyItemInDb(String tableName, Map<String, AttributeValue> key, 
+                                String fieldName, String expectedValue) {
+        Map<String, AttributeValue> item = getItemFromDb(tableName, key);
+        assertThat(item).isNotNull();
+        assertThat(item.get(fieldName)).isNotNull();
+        assertThat(item.get(fieldName).getS()).isEqualTo(expectedValue);
+    }
+
+    /**
+     * Verify that an item does not exist in the database
+     */
+    protected void verifyItemNotInDb(String tableName, Map<String, AttributeValue> key) {
+        Map<String, AttributeValue> item = getItemFromDb(tableName, key);
+        assertThat(item).isNull();
     }
 }

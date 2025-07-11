@@ -18,6 +18,7 @@
 package ua.org.java.dynamoit.e2e;
 
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import javafx.scene.control.Button;
 import javafx.scene.input.KeyCode;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxRobot;
@@ -219,15 +220,34 @@ class TableOperationsE2ETest extends DynamoItE2ETestBase {
         
         // Check if profile already exists
         if (robot.lookup("test-local").tryQuery().isEmpty()) {
-            robot.clickOn("Profiles");
-            robot.clickOn("Add Local Profile");
+            // Click the "Add" button - try different selectors
+            try {
+                robot.clickOn(robot.lookup((Button button) -> button.getTooltip() != null && 
+                    button.getTooltip().getText().contains("Add a new profile")).queryButton());
+            } catch (Exception e) {
+                // If tooltip selector doesn't work, try clicking the first button in the toolbar
+                robot.clickOn("Button");
+            }
             waitForUi();
             
+            // Click the "Local" tab in the dialog
+            robot.clickOn("Local");
+            waitForUi();
+            
+            // Click on the first text field and fill profile name
+            robot.clickOn(".text-field");
             robot.write("test-local");
             robot.press(KeyCode.TAB);
+            
+            // Fill in endpoint URL
             robot.write(dynamoDbEndpoint);
-            robot.clickOn("Save");
+            
+            // Click OK to save
+            robot.clickOn("OK");
             waitForUi();
+            
+            // Wait for the profile to be created
+            Thread.sleep(1000);
         }
         
         // Select the profile
