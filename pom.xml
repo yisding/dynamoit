@@ -43,6 +43,13 @@
         <destination.dir>${project.build.directory}/${project.name}</destination.dir>
         <destination.name>${project.name}</destination.name>
         <icon/><!-- defined in the profile -->
+        
+        <!-- TestFX/JavaFX Test Configuration Properties (can be overridden) -->
+        <testfx.headless>true</testfx.headless>
+        <prism.order>sw</prism.order>
+        <java.awt.headless>true</java.awt.headless>
+        <glass.platform>Monocle</glass.platform>
+        <monocle.platform>Headless</monocle.platform>
     </properties>
 
     <build>
@@ -74,11 +81,12 @@
                         --add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED
                         --add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED
                         --add-opens javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED
-                        -Dtestfx.headless=true
-                        -Dprism.order=sw
-                        -Djava.awt.headless=true
-                        -Dglass.platform=Monocle
-                        -Dmonocle.platform=Headless
+                        --enable-native-access=ALL-UNNAMED
+                        -Dtestfx.headless=${testfx.headless}
+                        -Dprism.order=${prism.order}
+                        -Djava.awt.headless=${java.awt.headless}
+                        -Dglass.platform=${glass.platform}
+                        -Dmonocle.platform=${monocle.platform}
                     </argLine>
                     <!-- Exclude E2E tests from regular test runs -->
                     <excludes>
@@ -239,11 +247,12 @@
                                 --add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED
                                 --add-opens javafx.graphics/com.sun.glass.ui=ALL-UNNAMED
                                 --add-opens javafx.controls/com.sun.javafx.scene.control=ALL-UNNAMED
-                                -Dtestfx.headless=true
-                                -Dprism.order=sw
-                                -Djava.awt.headless=true
-                                -Dglass.platform=Monocle
-                                -Dmonocle.platform=Headless
+                                --enable-native-access=ALL-UNNAMED
+                                -Dtestfx.headless=${testfx.headless}
+                                -Dprism.order=${prism.order}
+                                -Djava.awt.headless=${java.awt.headless}
+                                -Dglass.platform=${glass.platform}
+                                -Dmonocle.platform=${monocle.platform}
                             </argLine>
                         </configuration>
                     </plugin>

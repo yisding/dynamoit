@@ -1,7 +1,15 @@
 #!/bin/bash
 
 # DynamoIt E2E Test Runner
-# This script provides convenient ways to run different test suites
+# This script provides convenie    # Configure Maven properties based on visible mode
+    local maven_props=""
+    if [ "$visible_mode" = "true" ]; then
+        maven_props="-Dtestfx.headless=false -Djava.awt.headless=false"
+        echo -e "${YELLOW}👀 Running in VISIBLE mode for debugging${NC}"
+    else
+        maven_props="-Dtestfx.headless=true -Dprism.order=sw -Djava.awt.headless=true -Dglass.platform=Monocle -Dmonocle.platform=Headless"
+        echo -e "${GREEN}🔧 Running in HEADLESS mode${NC}"
+    fio run different test suites
 
 set -e
 
@@ -17,6 +25,7 @@ echo "================================="
 echo ""
 echo -e "${YELLOW}ℹ️  Note: E2E tests are excluded from regular 'mvn test' runs for performance.${NC}"
 echo -e "${YELLOW}   Use this script or specify tests explicitly to run E2E tests.${NC}"
+echo -e "${YELLOW}   For visible mode debugging, use the 'visible' option.${NC}"
 echo ""
 
 # Function to print usage
@@ -56,12 +65,8 @@ check_java() {
 
 # Setup test environment
 setup_environment() {
-    export TESTFX_HEADLESS=true
-    export PRISM_ORDER=sw
-    export JAVA_AWT_HEADLESS=true
-    export GLASS_PLATFORM=Monocle
-    export MONOCLE_PLATFORM=Headless
-    echo -e "${GREEN}🔧 Environment configured for headless testing${NC}"
+    echo -e "${GREEN}🔧 Environment configured for test execution${NC}"
+    echo -e "${YELLOW}ℹ️  Test mode (headless/visible) will be configured per test run${NC}"
 }
 
 # Function to run tests with proper configuration
@@ -73,17 +78,18 @@ run_test() {
     
     echo -e "${YELLOW}🧪 Running $description...${NC}"
     
-    # Override environment for visible mode
+    # Configure Maven properties based on visible mode
+    local maven_props=""
     if [ "$visible_mode" = "true" ]; then
-        export TESTFX_HEADLESS=false
-        export JAVA_AWT_HEADLESS=false
-        unset GLASS_PLATFORM
-        unset MONOCLE_PLATFORM
+        maven_props="-Dtestfx.headless=false -Djava.awt.headless=false -Dglass.platform= -Dmonocle.platform="
         echo -e "${YELLOW}👀 Running in VISIBLE mode for debugging${NC}"
+    else
+        maven_props="-Dtestfx.headless=true -Dprism.order=sw -Djava.awt.headless=true -Dglass.platform=Monocle -Dmonocle.platform=Headless"
+        echo -e "${GREEN}� Running in HEADLESS mode${NC}"
     fi
     
     # Run the tests
-    if mvn test -Dtest="$test_pattern" -Dheadless=$([ "$visible_mode" = "true" ] && echo "false" || echo "true") -q $mvn_args; then
+    if mvn test -Dtest="$test_pattern" $maven_props -q $mvn_args; then
         echo -e "${GREEN}✅ $description completed successfully${NC}"
     else
         echo -e "${RED}❌ $description failed${NC}"
