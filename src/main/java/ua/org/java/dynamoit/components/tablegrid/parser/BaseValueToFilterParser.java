@@ -17,37 +17,31 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.internal.Filter;
+import ua.org.java.dynamoit.components.tablegrid.Attributes;
 
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public abstract class BaseValueToFilterParser<T extends Filter<T>> implements ValueToFilterParser<T> {
+public abstract class BaseValueToFilterParser implements ValueToFilterParser {
 
-    private final Matcher matcher;
-    protected T filter;
+    @Override
+    public boolean matches(String value) {
+        return getMatcher(value).matches();
+    }
 
-    public BaseValueToFilterParser(String value, T filter) {
-        matcher = regPattern().matcher(value.trim());
-        this.filter = filter;
+    @Override
+    public FilterExpression parse(String attributeName, String value, Attributes.Type type) {
+        Matcher matcher = getMatcher(value);
+        if (!matcher.matches()) return null;
+        String term = matcher.groupCount() > 0 ? matcher.group(1) : "";
+        return createExpression(attributeName, term, type);
+    }
+
+    protected Matcher getMatcher(String value) {
+        return regPattern().matcher(value.trim());
     }
 
     protected abstract Pattern regPattern();
 
-    protected abstract Consumer<String> termConsumer();
-
-    @Override
-    public boolean matches() {
-        return matcher.matches();
-    }
-
-    @Override
-    public T parse() {
-        String group = matcher.group(1);
-        if (!group.isBlank()) {
-            termConsumer().accept(group);
-        }
-        return filter;
-    }
+    protected abstract FilterExpression createExpression(String attributeName, String term, Attributes.Type type);
 }

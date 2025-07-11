@@ -17,8 +17,12 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.QueryFilter;
-import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import ua.org.java.dynamoit.components.tablegrid.parser.BeginsWithParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.FilterExpression;
+import ua.org.java.dynamoit.components.tablegrid.Attributes.Type;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import java.util.Map;
+
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -27,21 +31,22 @@ public class BeginsWithParserTest {
 
     @Test
     public void testEmpty() {
-        assertFalse(new BeginsWithParser<QueryFilter>("", null).matches());
-        assertFalse(new BeginsWithParser<QueryFilter>(" ", null).matches());
-        assertTrue(new BeginsWithParser<QueryFilter>("^", null).matches());
+        assertFalse(new BeginsWithParser().matches(""));
+        assertFalse(new BeginsWithParser().matches(" "));
+        assertFalse(new BeginsWithParser().matches("^"));
+        assertTrue(new BeginsWithParser().matches("^hello"));
     }
 
     @Test
     public void testValue() {
-        QueryFilter filter = new QueryFilter("attr");
-        BeginsWithParser<QueryFilter> parser = new BeginsWithParser<>("^hello", filter);
-        assertTrue(parser.matches());
+        BeginsWithParser parser = new BeginsWithParser();
+        assertTrue(parser.matches("^hello"));
 
-        parser.parse();
+        FilterExpression fe = parser.parse("attr", "^hello", null);
 
-        assertEquals(ComparisonOperator.BEGINS_WITH, filter.getComparisonOperator());
-        assertArrayEquals(new Object[]{"hello"}, filter.getValues());
+        assertEquals("begins_with(#attr, :attr)", fe.expression);
+        assertEquals(Map.of("#attr", "attr"), fe.names);
+        assertEquals(Map.of(":attr", AttributeValue.builder().s("hello").build()), fe.values);
     }
 
 }

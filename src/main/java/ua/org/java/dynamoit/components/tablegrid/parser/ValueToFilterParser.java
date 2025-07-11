@@ -17,10 +17,12 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-public interface ValueToFilterParser<T> {
+import ua.org.java.dynamoit.components.tablegrid.Attributes;
 
-    boolean matches();
+public interface ValueToFilterParser {
 
-    T parse();
+    boolean matches(String value);
+
+    FilterExpression parse(String attributeName, String value, Attributes.Type type);
 
 }

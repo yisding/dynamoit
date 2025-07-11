@@ -17,24 +17,23 @@
 
 package ua.org.java.dynamoit.db;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.auth.profile.ProfilesConfigFile;
-import com.amazonaws.client.builder.AwsClientBuilder;
-import com.amazonaws.profile.path.AwsProfileFileLocationProvider;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.document.DynamoDB;
-import com.amazonaws.services.dynamodbv2.model.ListTablesResult;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.profiles.Profile;
+import software.amazon.awssdk.profiles.ProfileFile;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.ListTablesRequest;
+import software.amazon.awssdk.services.dynamodb.model.ListTablesResponse;
 import ua.org.java.dynamoit.model.profile.LocalProfileDetails;
 import ua.org.java.dynamoit.model.profile.PreconfiguredProfileDetails;
 import ua.org.java.dynamoit.model.profile.ProfileDetails;
 import ua.org.java.dynamoit.model.profile.RemoteProfileDetails;
 
+import java.net.URI;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -42,64 +41,51 @@ import static ua.org.java.dynamoit.utils.RegionsUtils.ALL_REGIONS;
 
 public class DynamoDBService {
 
-    private final Map<Integer, AmazonDynamoDB> profileDynamoDBClientMap = new HashMap<>();
-    private final Map<Integer, DynamoDB> profileDocumentClientMap = new HashMap<>();
+    private final Map<Integer, DynamoDbClient> profileDynamoDBClientMap = new HashMap<>();
 
     public Stream<ProfileDetails> getAvailableProfiles() {
-        Function<String, String> cutProfilePrefix = profileName -> profileName.startsWith("profile ") ? profileName.substring(8).trim() : profileName;
-        // config file contains profile and region values
-        Map<String, ProfileDetails> profileMap = new ProfilesConfigFile(AwsProfileFileLocationProvider.DEFAULT_CONFIG_LOCATION_PROVIDER.getLocation()).getAllBasicProfiles()
-                .values()
-                .stream()
-                .map(profile -> new PreconfiguredProfileDetails(cutProfilePrefix.apply(profile.getProfileName()), profile.getRegion()))
-                .collect(Collectors.toMap(ProfileDetails::getName, profile -> profile));
-
-        // by default it uses credentials config with contains profile and access keys
-        return new ProfilesConfigFile().getAllBasicProfiles()
-                .values()
-                .stream()
-                .map(profile -> cutProfilePrefix.apply(profile.getProfileName()))
-                .map(profileName -> profileMap.computeIfAbsent(profileName, __ -> new PreconfiguredProfileDetails(profileName, ALL_REGIONS.get(0))));
+        Map<String, Profile> profiles = ProfileFile.defaultProfileFile().profiles();
+        return profiles.values().stream()
+                .map(profile -> new PreconfiguredProfileDetails(profile.name(), profile.property("region").orElse(ALL_REGIONS.get(0))));
     }
 
     public CompletableFuture<List<String>> getListOfTables(ProfileDetails profileDetails) {
         return CompletableFuture.supplyAsync(() -> {
+            DynamoDbClient dbClient = getOrCreateDynamoDbClient(profileDetails);
             String lastEvaluatedTableName = null;
             List<String> tableNames = new ArrayList<>();
             do {
-                AmazonDynamoDB dbClient = getOrCreateDynamoDBClient(profileDetails);
-                ListTablesResult listTablesResult = lastEvaluatedTableName == null ? dbClient.listTables() : dbClient.listTables(lastEvaluatedTableName);
-                lastEvaluatedTableName = listTablesResult.getLastEvaluatedTableName();
-                tableNames.addAll(listTablesResult.getTableNames());
+                ListTablesRequest request = ListTablesRequest.builder()
+                        .exclusiveStartTableName(lastEvaluatedTableName)
+                        .build();
+                ListTablesResponse response = dbClient.listTables(request);
+                lastEvaluatedTableName = response.lastEvaluatedTableName();
+                tableNames.addAll(response.tableNames());
             } while (lastEvaluatedTableName != null);
 
             return tableNames;
         });
     }
 
-    public AmazonDynamoDB getOrCreateDynamoDBClient(ProfileDetails profileDetails) {
+    public DynamoDbClient getOrCreateDynamoDbClient(ProfileDetails profileDetails) {
         return profileDynamoDBClientMap.computeIfAbsent(profileDetails.hashCode(), __ -> {
             if (profileDetails instanceof PreconfiguredProfileDetails p) {
-                return AmazonDynamoDBClientBuilder.standard()
-                        .withCredentials(new ProfileCredentialsProvider(p.getName()))
-                        .withRegion(p.getRegion())
+                return DynamoDbClient.builder()
+                        .credentialsProvider(ProfileCredentialsProvider.create(p.getName()))
+                        .region(Region.of(p.getRegion()))
                         .build();
             } else if (profileDetails instanceof LocalProfileDetails p) {
-                return AmazonDynamoDBClientBuilder.standard()
-                        .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(p.getEndPoint(), ""))
+                return DynamoDbClient.builder()
+                        .endpointOverride(URI.create(p.getEndPoint()))
                         .build();
             } else if (profileDetails instanceof RemoteProfileDetails p) {
-                return AmazonDynamoDBClientBuilder.standard()
-                        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(p.getAccessKeyId(), p.getSecretKey())))
-                        .withRegion(p.getRegion())
+                return DynamoDbClient.builder()
+                        .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(p.getAccessKeyId(), p.getSecretKey())))
+                        .region(Region.of(p.getRegion()))
                         .build();
             }
             throw new RuntimeException("That profile details is not supported");
         });
-    }
-
-    public DynamoDB getOrCreateDocumentClient(ProfileDetails profileDetails) {
-        return profileDocumentClientMap.computeIfAbsent(profileDetails.hashCode(), key -> new DynamoDB(getOrCreateDynamoDBClient(profileDetails)));
     }
 
 }

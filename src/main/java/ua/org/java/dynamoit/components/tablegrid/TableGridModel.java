@@ -17,9 +17,8 @@
 
 package ua.org.java.dynamoit.components.tablegrid;
 
-import com.amazonaws.services.dynamodbv2.document.Item;
-import com.amazonaws.services.dynamodbv2.document.Page;
-import com.amazonaws.services.dynamodbv2.model.TableDescription;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.TableDescription;
 import javafx.beans.binding.Bindings;
 import javafx.beans.binding.IntegerBinding;
 import javafx.beans.property.SimpleStringProperty;
@@ -28,6 +27,8 @@ import javafx.collections.ObservableList;
 import javafx.collections.ObservableMap;
 import ua.org.java.dynamoit.components.main.MainModel;
 import ua.org.java.dynamoit.model.TableDef;
+
+import java.util.Map;
 
 public class TableGridModel {
 
@@ -38,9 +39,9 @@ public class TableGridModel {
     private String tableName;
     private String profile;
 
-    private final ObservableList<Item> rows = FXCollections.observableArrayList();
+    private final ObservableList<Map<String, AttributeValue>> rows = FXCollections.observableArrayList();
     private final IntegerBinding rowsSize = Bindings.createIntegerBinding(rows::size, rows);
-    private Page<Item, ?> currentPage;
+    private Map<String, AttributeValue> lastEvaluatedKey;
 
     private final ObservableMap<String, SimpleStringProperty> attributeFilterMap = FXCollections.observableHashMap();
 
@@ -76,7 +77,7 @@ public class TableGridModel {
         this.profile = profile;
     }
 
-    public ObservableList<Item> getRows() {
+    public ObservableList<Map<String, AttributeValue>> getRows() {
         return rows;
     }
 
@@ -88,16 +89,16 @@ public class TableGridModel {
         return rowsSize;
     }
 
+    public Map<String, AttributeValue> getLastEvaluatedKey() {
+        return lastEvaluatedKey;
+    }
+
+    public void setLastEvaluatedKey(Map<String, AttributeValue> lastEvaluatedKey) {
+        this.lastEvaluatedKey = lastEvaluatedKey;
+    }
+
     public ObservableMap<String, SimpleStringProperty> getAttributeFilterMap() {
         return attributeFilterMap;
-    }
-
-    public Page<Item, ?> getCurrentPage() {
-        return currentPage;
-    }
-
-    public void setCurrentPage(Page<Item, ?> currentPage) {
-        this.currentPage = currentPage;
     }
 
     public TableDescription getOriginalTableDescription() {

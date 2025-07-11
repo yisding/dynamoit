@@ -17,14 +17,16 @@
 
 package ua.org.java.dynamoit.components.tablegrid;
 
-import com.amazonaws.services.dynamodbv2.document.Item;
-import com.amazonaws.services.dynamodbv2.document.internal.Filter;
 import javafx.util.Pair;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import ua.org.java.dynamoit.components.tablegrid.parser.*;
 import ua.org.java.dynamoit.utils.Utils;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -32,64 +34,55 @@ import java.util.stream.Stream;
 public final class Attributes {
 
     public enum Type {
-        STRING, NUMBER, BOOLEAN
+        STRING, NUMBER, BOOLEAN, BINARY, NULL, LIST, MAP, STRING_SET, NUMBER_SET, BINARY_SET
     }
 
     private Attributes() {
     }
 
-
-    public static Map<String, Attributes.Type> defineAttributesTypes(List<Item> itemList) {
-        Function<Object, Attributes.Type> mapper = value -> {
-            if (value != null) {
-                if (value instanceof Boolean) {
-                    return Attributes.Type.BOOLEAN;
-                }
-                if (value instanceof Number) {
-                    return Attributes.Type.NUMBER;
-                }
-            }
-            return Attributes.Type.STRING;
-        };
-
+    public static Map<String, Type> defineAttributesTypes(List<Map<String, AttributeValue>> itemList) {
         return itemList.stream()
-                .flatMap(item ->
-                        Utils.asStream(item.attributes())
-                                .map(entry -> new Pair<>(entry.getKey(), mapper.apply(entry.getValue()))))
-                .collect(Collectors.toMap(Pair::getKey, Pair::getValue, (attributeType, attributeType2) -> attributeType));
+                .flatMap(item -> item.entrySet().stream()
+                        .map(entry -> new javafx.util.Pair<>(entry.getKey(), fromAttributeValue(entry.getValue()))))
+                .collect(Collectors.toMap(Pair::getKey, Pair::getValue, (type1, type2) -> type1));
     }
 
-    public static Type fromDynamoDBType(String dynamoDBType) {
-        switch (dynamoDBType) {
-            case "N":
-                return Type.NUMBER;
-            case "BOOL":
-                return Type.BOOLEAN;
-        }
-        return Attributes.Type.STRING;
+    private static Type fromAttributeValue(AttributeValue av) {
+        if (av.s() != null) return Type.STRING;
+        if (av.n() != null) return Type.NUMBER;
+        if (av.b() != null) return Type.BINARY;
+        if (av.bool() != null) return Type.BOOLEAN;
+        if (av.nul() != null) return Type.NULL;
+        if (av.l() != null) return Type.LIST;
+        if (av.m() != null) return Type.MAP;
+        if (av.ss() != null) return Type.STRING_SET;
+        if (av.ns() != null) return Type.NUMBER_SET;
+        if (av.bs() != null) return Type.BINARY_SET;
+        return Type.STRING;
     }
 
-    public static <T extends Filter<T>> T attributeValueToFilter(String attribute, String value, Type type, Function<String, T> filterProvider) {
-        T filter = filterProvider.apply(attribute);
+    public static Type fromDynamoDBType(ScalarAttributeType dynamoDBType) {
+        return Type.valueOf(dynamoDBType.name());
+    }
 
+    public static FilterExpression attributeValueToFilter(String attribute, String value, Type type) {
         if (value == null || value.isBlank()) {
-            return filter;
+            return null;
         }
 
-        Stream.of(
-                new ContainsParser<>(value, filter),
-                new BeginsWithParser<>(value, filter),
-                new ExistsParser<>(value, filter),
-                new NotEqualsParser<>(value, type, filter),
-                new NotContainsParser<>(value, filter),
-                new NotExistsParser<>(value, filter),
-                new EqualsParser<>(value, type, filter) // last parser
-        )
-                .filter(BaseValueToFilterParser::matches)
+        return Arrays.asList(
+                new ContainsParser(),
+                new BeginsWithParser(),
+                new ExistsParser(),
+                new NotEqualsParser(),
+                new NotContainsParser(),
+                new NotExistsParser(),
+                new EqualsParser() // last parser
+        ).stream()
+                .filter(p -> p.matches(value))
                 .findFirst()
-                .map(BaseValueToFilterParser::parse);
-
-        return filter;
+                .map(p -> p.parse(attribute, value, type))
+                .orElse(null);
     }
 
 }

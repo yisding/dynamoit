@@ -17,18 +17,14 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.internal.Filter;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import ua.org.java.dynamoit.components.tablegrid.Attributes;
 
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-public class BeginsWithParser<T extends Filter<T>> extends BaseValueToFilterParser<T> {
+public class BeginsWithParser extends BaseValueToFilterParser {
 
-    private static final Pattern PATTERN = Pattern.compile("^\\^(.*)$");
-
-    public BeginsWithParser(String value, T filter) {
-        super(value, filter);
-    }
+    private static final Pattern PATTERN = Pattern.compile("\\^(.+)");
 
     @Override
     protected Pattern regPattern() {
@@ -36,7 +32,10 @@ public class BeginsWithParser<T extends Filter<T>> extends BaseValueToFilterPars
     }
 
     @Override
-    protected Consumer<String> termConsumer() {
-        return term -> filter.beginsWith(term);
+    protected FilterExpression createExpression(String attributeName, String term, Attributes.Type type) {
+        AttributeValue av = AttributeValue.builder().s(term).build();
+        String phName = "#" + attributeName;
+        String phVal = ":" + attributeName;
+        return new FilterExpression("begins_with(" + phName + ", " + phVal + ")", phName, attributeName, phVal, av);
     }
 }

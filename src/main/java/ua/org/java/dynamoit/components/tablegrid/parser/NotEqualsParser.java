@@ -17,22 +17,15 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.internal.Filter;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import ua.org.java.dynamoit.components.tablegrid.Attributes;
 
 import java.math.BigDecimal;
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-public class NotEqualsParser<T extends Filter<T>> extends BaseValueToFilterParser<T> {
+public class NotEqualsParser extends BaseValueToFilterParser {
 
-    private static final Pattern PATTERN = Pattern.compile("^!=(.*)$");
-    private final Attributes.Type type;
-
-    public NotEqualsParser(String value, Attributes.Type type, T filter) {
-        super(value, filter);
-        this.type = type;
-    }
+    private static final Pattern PATTERN = Pattern.compile("!=(.+)");
 
     @Override
     protected Pattern regPattern() {
@@ -40,20 +33,23 @@ public class NotEqualsParser<T extends Filter<T>> extends BaseValueToFilterParse
     }
 
     @Override
-    protected Consumer<String> termConsumer() {
-        return term -> {
-            try {
-                if (type == Attributes.Type.NUMBER) {
-                    filter.ne(new BigDecimal(term));
-                } else if (type == Attributes.Type.BOOLEAN) {
-                    filter.ne(Boolean.valueOf(term));
-                } else {
-                    filter.ne(term);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-                filter.ne(term);
+    protected FilterExpression createExpression(String attributeName, String term, Attributes.Type type) {
+        AttributeValue.Builder b = AttributeValue.builder();
+        try {
+            if (type == Attributes.Type.NUMBER) {
+                b.n(new BigDecimal(term).toString());
+            } else if (type == Attributes.Type.BOOLEAN) {
+                b.bool(Boolean.parseBoolean(term));
+            } else {
+                b.s(term);
             }
-        };
+        } catch (Exception e) {
+            e.printStackTrace();
+            b.s(term);
+        }
+        AttributeValue av = b.build();
+        String phName = "#" + attributeName;
+        String phVal = ":" + attributeName;
+        return new FilterExpression(phName + " <> " + phVal, phName, attributeName, phVal, av);
     }
 }

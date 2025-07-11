@@ -17,8 +17,9 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.QueryFilter;
-import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import ua.org.java.dynamoit.components.tablegrid.parser.FilterExpression;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import java.util.Map;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -27,22 +28,22 @@ public class NotContainsParserTest {
 
     @Test
     public void testBlank() {
-        assertFalse(new NotContainsParser<QueryFilter>("", null).matches());
-        assertFalse(new NotContainsParser<QueryFilter>(" ", null).matches());
-        assertFalse(new NotContainsParser<QueryFilter>("~", null).matches());
-        assertTrue(new NotContainsParser<QueryFilter>("!~", null).matches());
+        assertFalse(new NotContainsParser().matches(""));
+        assertFalse(new NotContainsParser().matches(" "));
+        assertFalse(new NotContainsParser().matches("!~"));
+        assertTrue(new NotContainsParser().matches("!~hello"));
     }
 
     @Test
     public void testValue() {
-        QueryFilter filter = new QueryFilter("attr");
-        NotContainsParser<QueryFilter> parser = new NotContainsParser<>("!~hello", filter);
-        assertTrue(parser.matches());
+        NotContainsParser parser = new NotContainsParser();
+        assertTrue(parser.matches("!~hello"));
 
-        parser.parse();
+        FilterExpression fe = parser.parse("attr", "!~hello", null);
 
-        assertEquals(ComparisonOperator.NOT_CONTAINS, filter.getComparisonOperator());
-        assertArrayEquals(new Object[]{"hello"}, filter.getValues());
+        assertEquals("not contains(#attr, :attr)", fe.expression);
+        assertEquals(Map.of("#attr", "attr"), fe.names);
+        assertEquals(Map.of(":attr", AttributeValue.builder().s("hello").build()), fe.values);
     }
 
 }

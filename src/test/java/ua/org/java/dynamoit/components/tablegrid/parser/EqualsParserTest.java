@@ -17,9 +17,9 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.QueryFilter;
 import org.junit.Test;
 import ua.org.java.dynamoit.components.tablegrid.Attributes;
+import ua.org.java.dynamoit.components.tablegrid.Attributes.Type;
 
 import static org.junit.Assert.*;
 
@@ -27,9 +27,9 @@ public class EqualsParserTest {
 
     @Test
     public void test() {
-        assertTrue(new EqualsParser<QueryFilter>("", Attributes.Type.STRING, null).matches());
-        assertTrue(new EqualsParser<QueryFilter>(" ", Attributes.Type.STRING, null).matches());
-        assertTrue(new EqualsParser<QueryFilter>("1", Attributes.Type.STRING, null).matches());
+        assertTrue(new EqualsParser().matches(""));
+        assertTrue(new EqualsParser().matches(" "));
+        assertTrue(new EqualsParser().matches("1"));
     }
 
 }

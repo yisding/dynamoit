@@ -17,17 +17,11 @@
 
 package ua.org.java.dynamoit.components.tablegrid;
 
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.document.*;
-import com.amazonaws.services.dynamodbv2.document.internal.PageBasedCollection;
-import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
-import com.amazonaws.services.dynamodbv2.document.spec.ScanSpec;
-import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
-import com.amazonaws.services.dynamodbv2.model.*;
-import com.amazonaws.util.StringUtils;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.*;
+import software.amazon.awssdk.utils.StringUtils;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.reactivex.Observable;
@@ -39,13 +33,13 @@ import ua.org.java.dynamoit.EventBus;
 import ua.org.java.dynamoit.db.DynamoDBService;
 import ua.org.java.dynamoit.db.KeySchemaType;
 import ua.org.java.dynamoit.model.TableDef;
-
+import ua.org.java.dynamoit.components.tablegrid.parser.FilterExpression;
+import ua.org.java.dynamoit.utils.Utils;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -59,32 +53,31 @@ import static java.util.concurrent.CompletableFuture.runAsync;
 import static java.util.concurrent.CompletableFuture.supplyAsync;
 import static ua.org.java.dynamoit.components.tablegrid.Attributes.*;
 import static ua.org.java.dynamoit.utils.Utils.*;
+import java.nio.file.Files;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import ua.org.java.dynamoit.components.tablegrid.parser.ValueToFilterParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.EqualsParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.NotEqualsParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.BeginsWithParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.ContainsParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.NotContainsParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.ExistsParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.NotExistsParser;
 
 public class TableGridController {
 
     private static final Logger LOG = Logger.getLogger(TableGridController.class.getName());
 
-    /**
-     * Maximum number of items in one page
-     */
     private static final int PAGE_SIZE = 100;
 
-    private final AmazonDynamoDB dbClient;
-    private final Table table;
+    private final DynamoDbClient dynamoDbClient;
     private final TableGridContext context;
     private final TableGridModel tableModel;
     private final EventBus eventBus;
     private final Executor uiExecutor;
     private final HostServices hostServices;
-    private final DynamoDB documentClient;
 
-    public TableGridController(TableGridContext context,
-                               TableGridModel tableModel,
-                               DynamoDBService dynamoDBService,
-                               EventBus eventBus,
-                               Executor uiExecutor,
-                               HostServices hostServices
-    ) {
+    public TableGridController(TableGridContext context, TableGridModel tableModel, DynamoDBService dynamoDBService, EventBus eventBus, Executor uiExecutor, HostServices hostServices) {
         this.context = context;
         this.tableModel = tableModel;
         this.eventBus = eventBus;
@@ -99,16 +92,14 @@ public class TableGridController {
         tableModel.setTableName(context.tableName());
         tableModel.setProfile(context.tableName());
 
-        dbClient = dynamoDBService.getOrCreateDynamoDBClient(context.profileDetails());
-        documentClient = dynamoDBService.getOrCreateDocumentClient(context.profileDetails());
-        table = documentClient.getTable(context.tableName());
+        dynamoDbClient = dynamoDBService.getOrCreateDynamoDbClient(context.profileDetails());
     }
 
     public void init() {
         eventBus.activity(
                 supplyAsync(() -> {
                     if (tableModel.getOriginalTableDescription() == null) {
-                        return supplyAsync(() -> dbClient.describeTable(context.tableName()))
+                        return supplyAsync(() -> dynamoDbClient.describeTable(DescribeTableRequest.builder().tableName(context.tableName()).build()))
                                 .thenAcceptAsync(this::bindToModel, uiExecutor);
                     } else {
                         bindToModel(tableModel.getTableDef());
@@ -117,20 +108,77 @@ public class TableGridController {
                 })
                         .thenCompose(__ -> __)
                         .thenRun(this::applyContext)
-                        .thenCompose(__ -> queryPageItems())
+                        .thenCompose(__ -> executeQueryOrSearch(null))
                         .thenAcceptAsync(this::bindToModel, uiExecutor)
         );
     }
 
+    private void bindToModel(DescribeTableResponse describeTable) {
+        TableDescription originalTableDescription = describeTable.table();
+        tableModel.setOriginalTableDescription(originalTableDescription);
+
+        Utils.getHashKey(describeTable).ifPresent(tableModel.getTableDef()::setHashAttribute);
+        Utils.getRangeKey(describeTable).ifPresent(tableModel.getTableDef()::setRangeAttribute);
+
+        Map<String, Attributes.Type> attributes = new TreeMap<>(KEYS_FIRST(hash(), range()));
+        attributes.putAll(
+                originalTableDescription.attributeDefinitions().stream()
+                        .collect(Collectors.toMap(
+                                AttributeDefinition::attributeName,
+                                ad -> Attributes.Type.valueOf(ad.attributeType().name())
+                        )));
+
+        attributes.forEach((name, type) -> tableModel.getTableDef().getAttributeTypesMap().put(name, type));
+
+        tableModel.getTableDef().setTotalCount(originalTableDescription.itemCount());
+    }
+
+    private void bindToModel(Pair<List<Map<String, AttributeValue>>, Map<String, AttributeValue>> pair) {
+        Map<String, Attributes.Type> attributesTypes = new TreeMap<>(KEYS_FIRST(hash(), range()));
+        attributesTypes.putAll(defineAttributesTypes(pair.getKey()));
+        tableModel.getTableDef().getAttributeTypesMap().putAll(attributesTypes);
+        tableModel.setLastEvaluatedKey(pair.getValue());
+        tableModel.getRows().addAll(pair.getKey());
+    }
+
+    private void bindToModel(TableDef tableDef) {
+        tableDef.getAttributeTypesMap().keySet().forEach(attr -> tableModel.getAttributeFilterMap().computeIfAbsent(attr, __ -> new SimpleStringProperty()));
+    }
+
+    private Map<String, Attributes.Type> defineAttributesTypes(List<Map<String, AttributeValue>> items) {
+        Map<String, Attributes.Type> types = new TreeMap<>(KEYS_FIRST(hash(), range()));
+        items.forEach(item -> item.forEach((key, av) -> {
+            Attributes.Type t = fromAttributeValue(av);
+            if (t != null) {
+                types.put(key, t);
+            }
+        }));
+        return types;
+    }
+
+    private Attributes.Type fromAttributeValue(AttributeValue av) {
+        if (av.s() != null) return Attributes.Type.STRING;
+        if (av.n() != null) return Attributes.Type.NUMBER;
+        if (av.b() != null) return Attributes.Type.BINARY;
+        if (av.bool() != null) return Attributes.Type.BOOLEAN;
+        if (av.nul() != null) return Attributes.Type.NULL;
+        if (av.l() != null) return Attributes.Type.LIST;
+        if (av.m() != null) return Attributes.Type.MAP;
+        if (av.ss() != null) return Attributes.Type.STRING_SET;
+        if (av.ns() != null) return Attributes.Type.NUMBER_SET;
+        if (av.bs() != null) return Attributes.Type.BINARY_SET;
+        return null;
+    }
+
     public void onReachScrollEnd() {
-        if (tableModel.getCurrentPage().hasNextPage()) {
+        if (tableModel.getLastEvaluatedKey() != null && !tableModel.getLastEvaluatedKey().isEmpty()) {
             eventBus.activity(
-                    supplyAsync(() -> tableModel.getCurrentPage().nextPage())
-                            .thenApply(TableGridController::iteratePage)
+                    executeQueryOrSearch(tableModel.getLastEvaluatedKey())
                             .thenAcceptAsync(pair -> {
-                                tableModel.getTableDef().getAttributeTypesMap().putAll(defineAttributesTypes(pair.getKey()));
-                                tableModel.setCurrentPage(pair.getValue());
+                                Map<String, Attributes.Type> attributesTypes = defineAttributesTypes(pair.getKey());
+                                tableModel.getTableDef().getAttributeTypesMap().putAll(attributesTypes);
                                 tableModel.getRows().addAll(pair.getKey());
+                                tableModel.setLastEvaluatedKey(pair.getValue());
                             }, uiExecutor)
             );
         }
@@ -138,8 +186,8 @@ public class TableGridController {
 
     public CompletableFuture<Void> onRefreshData() {
         return eventBus.activity(
-                runAsync(() -> tableModel.getRows().clear(), uiExecutor)
-                        .thenComposeAsync(aVoid -> queryPageItems().thenAcceptAsync(this::bindToModel, uiExecutor))
+                executeQueryOrSearch(null)
+                        .thenAcceptAsync(pair -> bindToModel(pair), uiExecutor)
         );
     }
 
@@ -151,12 +199,9 @@ public class TableGridController {
         return textStream.successionEnds(Duration.ofMillis(100))
                 .map(text -> {
                     try {
-                        Item item = Item.fromJSON(text);
-
-                        if (jsonOnly) {
-                            return true;
-                        }
-                        return item.get(hash()) != null && (range() == null || item.get(range()) != null);
+                        Map<String, AttributeValue> item = jsonOnly ? Utils.fromRawJson(text) : Utils.fromSimpleJson(text);
+                        if (jsonOnly) return true;
+                        return item.containsKey(hash()) && (range() == null || item.containsKey(range()));
                     } catch (Exception e) {
                         return false;
                     }
@@ -175,13 +220,13 @@ public class TableGridController {
         );
     }
 
-    public void onDeleteItems(List<Item> items) {
+    public void onDeleteItems(List<Map<String, AttributeValue>> items) {
         eventBus.activity(
                 delete(items).thenRun(this::onRefreshData)
         );
     }
 
-    public void onPatchItems(List<Item> items, String jsonPatch, boolean isRaw) {
+    public void onPatchItems(List<Map<String, AttributeValue>> items, String jsonPatch, boolean isRaw) {
         eventBus.activity(
                 patchItems(items, jsonPatch, isRaw).thenRun(this::onRefreshData)
         );
@@ -194,13 +239,13 @@ public class TableGridController {
 
     public void onSaveToFile(File file) {
         eventBus.activity(
-                executeQueryOrSearch().thenAccept(items -> {
+                getAllItems().thenAccept(all -> {
                     try (BufferedWriter writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
                         JsonGenerator generator = new JsonFactory(new ObjectMapper()).createGenerator(writer);
                         generator.writeStartArray();
-                        asStream(items).forEach(o -> {
+                        all.forEach(map -> {
                             try {
-                                generator.writeRawValue(o.toJSON());
+                                generator.writeRawValue(Utils.toSimpleJson(map));
                             } catch (IOException e) {
                                 throw new RuntimeException(e);
                             }
@@ -221,14 +266,17 @@ public class TableGridController {
                     try (BufferedReader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
                         JsonNode root = new ObjectMapper().readTree(reader);
                         Observable.fromIterable(root::elements)
-                                .map(jsonNode -> Item.fromJSON(jsonNode.toString()))
+                                .map(jsonNode -> Utils.fromSimpleJson(jsonNode.toString()))
                                 .buffer(25)
                                 .map(list -> {
-                                    TableWriteItems addItems = new TableWriteItems(table.getTableName());
-                                    list.forEach(addItems::addItemToPut);
-                                    return addItems;
+                                    Map<String, List<WriteRequest>> requestItems = new HashMap<>();
+                                    List<WriteRequest> writes = list.stream()
+                                            .map(item -> WriteRequest.builder().putRequest(PutRequest.builder().item(item).build()).build())
+                                            .toList();
+                                    requestItems.put(context.tableName(), writes);
+                                    return BatchWriteItemRequest.builder().requestItems(requestItems).build();
                                 })
-                                .subscribe(documentClient::batchWriteItem);
+                                .subscribe(dynamoDbClient::batchWriteItem);
                     } catch (Exception e) {
                         LOG.log(Level.SEVERE, e.getMessage(), e);
                         throw new RuntimeException(e);
@@ -239,74 +287,179 @@ public class TableGridController {
         ).whenComplete((v, throwable) -> onRefreshData());
     }
 
-    /**
-     * Iterate page to get around PAGE_SIZE number of items if exist
-     *
-     * @param page current page
-     * @return list of items and next page
-     */
-    private static Pair<List<Item>, Page<Item, ?>> iteratePage(Page<Item, ?> page) {
-        List<Item> items = new ArrayList<>(PAGE_SIZE);
-        items.addAll(asStream(page).toList());
-
-        while (items.size() < PAGE_SIZE && page.hasNextPage()) {
-            page = page.nextPage();
-            items.addAll(asStream(page).toList());
-        }
-        return new Pair<>(items, page);
+    private CompletableFuture<List<Map<String, AttributeValue>>> getAllItems() {
+        return CompletableFuture.supplyAsync(() -> {
+            List<Map<String, AttributeValue>> all = new ArrayList<>();
+            Map<String, AttributeValue> lastKey = null;
+            do {
+                try {
+                    Pair<List<Map<String, AttributeValue>>, Map<String, AttributeValue>> pair = executeQueryOrSearch(lastKey).get();
+                    all.addAll(pair.getKey());
+                    lastKey = pair.getValue();
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            } while (lastKey != null && !lastKey.isEmpty());
+            return all;
+        });
     }
 
-    CompletableFuture<Pair<List<Item>, Page<Item, ?>>> queryPageItems() {
-        return executeQueryOrSearch()
-                .thenApply(PageBasedCollection::firstPage)
-                .thenApply(TableGridController::iteratePage);
-    }
-
-    private CompletableFuture<? extends ItemCollection<?>> executeQueryOrSearch() {
-        // query table if hash attribute has filter
+    protected CompletableFuture<Pair<List<Map<String, AttributeValue>>, Map<String, AttributeValue>>> executeQueryOrSearch(Map<String, AttributeValue> exclusiveStartKey) {
         if (notBlankFilterValue(hash())) {
-            SimpleStringProperty hashValueProperty = tableModel.getAttributeFilterMap().get(hash());
-            QueryFilter filter = attributeValueToFilter(hash(), hashValueProperty.get(), Type.STRING, QueryFilter::new);
-            // query if hash has eq operation only
-            if (filter.getComparisonOperator() == ComparisonOperator.EQ) {
-                QuerySpec querySpec = buildQuerySpec(hash(), range(), tableModel.getAttributeFilterMap());
-                return queryTableItems(querySpec);
+            FilterExpression hashFilter = attributeValueToFilter(hash(), tableModel.getAttributeFilterMap().get(hash()).get(), tableModel.getTableDef().getAttributeTypesMap().get(hash()));
+            if (hashFilter != null && "#attr = :val".equals(hashFilter.expression.trim())) {
+                return queryTableItems(hash(), range(), tableModel.getAttributeFilterMap(), exclusiveStartKey);
             }
-        } else if (tableModel.getOriginalTableDescription().getGlobalSecondaryIndexes() != null) {
-            // find global indexes with ALL properties projection
-            List<GlobalSecondaryIndexDescription> fullProjectionIndexes = tableModel.getOriginalTableDescription().getGlobalSecondaryIndexes().stream()
-                    .filter(__ -> __.getProjection().getProjectionType().equals("ALL")).toList();
-
-            // find the first index that has hash and range attributes in the filters map
+        }
+        if (tableModel.getOriginalTableDescription().globalSecondaryIndexes() != null) {
+            List<GlobalSecondaryIndexDescription> fullProjectionIndexes = tableModel.getOriginalTableDescription().globalSecondaryIndexes().stream()
+                    .filter(index -> index.projection().projectionType().equals("ALL"))
+                    .toList();
             Optional<GlobalSecondaryIndexDescription> globalIndexOptional = fullProjectionIndexes.stream()
-                    .filter(__ -> __.getKeySchema().stream()
-                            .allMatch(key -> notBlankFilterValue(key.getAttributeName()))
-                    ).findFirst();
-
-            // or try to find at least global index with hash in the filters map
+                    .filter(index -> index.keySchema().stream()
+                            .allMatch(key -> notBlankFilterValue(key.attributeName())))
+                    .findFirst();
             globalIndexOptional = globalIndexOptional.or(() -> fullProjectionIndexes.stream()
-                    .filter(__ -> lookUpKeyName(__.getKeySchema(), KeySchemaType.HASH).map(this::notBlankFilterValue).orElse(false)).findFirst()
-            );
-
+                    .filter(index -> Utils.lookUpKeyName(index.keySchema(), KeySchemaType.HASH).map(this::notBlankFilterValue).orElse(false))
+                    .findFirst());
             if (globalIndexOptional.isPresent()) {
                 GlobalSecondaryIndexDescription indexDescription = globalIndexOptional.get();
-
-                Index index = table.getIndex(indexDescription.getIndexName());
-                Optional<String> indexHash = lookUpKeyName(indexDescription.getKeySchema(), KeySchemaType.HASH);
-                Optional<String> indexRange = lookUpKeyName(indexDescription.getKeySchema(), KeySchemaType.RANGE);
-
+                Optional<String> indexHash = Utils.lookUpKeyName(indexDescription.keySchema(), KeySchemaType.HASH);
+                Optional<String> indexRange = Utils.lookUpKeyName(indexDescription.keySchema(), KeySchemaType.RANGE);
                 if (indexHash.isPresent()) {
-                    QuerySpec querySpec = buildQuerySpec(indexHash.get(), indexRange.orElse(null), tableModel.getAttributeFilterMap());
-                    return queryIndexItems(querySpec, index);
+                    return queryIndexItems(indexHash.get(), indexRange.orElse(null), indexDescription.indexName(), tableModel.getAttributeFilterMap(), exclusiveStartKey);
                 }
             }
         }
-        return scanItems(tableModel.getAttributeFilterMap());
+        return scanItems(tableModel.getAttributeFilterMap(), exclusiveStartKey);
     }
 
-    private CompletableFuture<Void> processItemAsync(String json, boolean isRaw, Consumer<Item> command) {
+    private CompletableFuture<Pair<List<Map<String, AttributeValue>>, Map<String, AttributeValue>>> scanItems(Map<String, SimpleStringProperty> attributeFilterMap, Map<String, AttributeValue> exclusiveStartKey) {
+        return supplyAsync(() -> {
+            List<FilterExpression> filters = attributeFilterMap.entrySet().stream()
+                    .filter(entry -> Objects.nonNull(entry.getValue().get()) && entry.getValue().get().trim().length() > 0)
+                    .map(entry -> attributeValueToFilter(entry.getKey(), entry.getValue().get(), tableModel.getTableDef().getAttributeTypesMap().get(entry.getKey())))
+                    .filter(Objects::nonNull)
+                    .toList();
+            String filterExpression = null;
+            Map<String, String> names = new HashMap<>();
+            Map<String, AttributeValue> values = new HashMap<>();
+            if (!filters.isEmpty()) {
+                List<String> exps = new ArrayList<>();
+                for (FilterExpression f : filters) {
+                    exps.add("(" + f.expression + ")");
+                    names.putAll(f.names);
+                    values.putAll(f.values);
+                }
+                filterExpression = String.join(" AND ", exps);
+            }
+            ScanRequest request = ScanRequest.builder().tableName(context.tableName()).filterExpression(filterExpression).expressionAttributeNames(names).expressionAttributeValues(values).limit(PAGE_SIZE).exclusiveStartKey(exclusiveStartKey).build();
+            ScanResponse response = dynamoDbClient.scan(request);
+            return new Pair<>(response.items(), response.lastEvaluatedKey());
+        });
+    }
+
+    private CompletableFuture<Pair<List<Map<String, AttributeValue>>, Map<String, AttributeValue>>> queryTableItems(String hashName, String rangeName, Map<String, SimpleStringProperty> attributeFilterMap, Map<String, AttributeValue> exclusiveStartKey) {
+        return supplyAsync(() -> {
+            String keyCondition = "#hk = :hkval";
+            Map<String, String> names = new HashMap<>();
+            Map<String, AttributeValue> values = new HashMap<>();
+            names.put("#hk", hashName);
+            Attributes.Type hType = tableModel.getTableDef().getAttributeTypesMap().get(hashName);
+            values.put(":hkval", buildAv(attributeFilterMap.get(hashName).get(), hType));
+            if (rangeName != null && notBlankFilterValue(rangeName)) {
+                keyCondition += " and #rk = :rkval";
+                names.put("#rk", rangeName);
+                Attributes.Type rType = tableModel.getTableDef().getAttributeTypesMap().get(rangeName);
+                values.put(":rkval", buildAv(attributeFilterMap.get(rangeName).get(), rType));
+            }
+            List<FilterExpression> filters = attributeFilterMap.entrySet().stream()
+                    .filter(entry -> !entry.getKey().equals(hashName) && !entry.getKey().equals(rangeName))
+                    .filter(entry -> notBlankFilterValue(entry.getKey()))
+                    .map(entry -> attributeValueToFilter(entry.getKey(), entry.getValue().get(), tableModel.getTableDef().getAttributeTypesMap().get(entry.getKey())))
+                    .filter(Objects::nonNull)
+                    .toList();
+            String filterExp = null;
+            if (!filters.isEmpty()) {
+                List<String> exps = new ArrayList<>();
+                for (FilterExpression f : filters) {
+                    exps.add("(" + f.expression + ")");
+                    names.putAll(f.names);
+                    values.putAll(f.values);
+                }
+                filterExp = String.join(" AND ", exps);
+            }
+            QueryRequest request = QueryRequest.builder().tableName(context.tableName()).keyConditionExpression(keyCondition).filterExpression(filterExp).expressionAttributeNames(names).expressionAttributeValues(values).limit(PAGE_SIZE).exclusiveStartKey(exclusiveStartKey).build();
+            QueryResponse response = dynamoDbClient.query(request);
+            return new Pair<>(response.items(), response.lastEvaluatedKey());
+        });
+    }
+
+    private CompletableFuture<Pair<List<Map<String, AttributeValue>>, Map<String, AttributeValue>>> queryIndexItems(String hashName, String rangeName, String indexName, Map<String, SimpleStringProperty> attributeFilterMap, Map<String, AttributeValue> exclusiveStartKey) {
+        return supplyAsync(() -> {
+            String keyCondition = "#hk = :hkval";
+            Map<String, String> names = new HashMap<>();
+            Map<String, AttributeValue> values = new HashMap<>();
+            names.put("#hk", hashName);
+            Attributes.Type hType = tableModel.getTableDef().getAttributeTypesMap().get(hashName);
+            values.put(":hkval", buildAv(attributeFilterMap.get(hashName).get(), hType));
+            if (rangeName != null && notBlankFilterValue(rangeName)) {
+                keyCondition += " and #rk = :rkval";
+                names.put("#rk", rangeName);
+                Attributes.Type rType = tableModel.getTableDef().getAttributeTypesMap().get(rangeName);
+                values.put(":rkval", buildAv(attributeFilterMap.get(rangeName).get(), rType));
+            }
+            List<FilterExpression> filters = attributeFilterMap.entrySet().stream()
+                    .filter(entry -> !entry.getKey().equals(hashName) && !entry.getKey().equals(rangeName))
+                    .filter(entry -> notBlankFilterValue(entry.getKey()))
+                    .map(entry -> attributeValueToFilter(entry.getKey(), entry.getValue().get(), tableModel.getTableDef().getAttributeTypesMap().get(entry.getKey())))
+                    .filter(Objects::nonNull)
+                    .toList();
+            String filterExp = null;
+            if (!filters.isEmpty()) {
+                List<String> exps = new ArrayList<>();
+                for (FilterExpression f : filters) {
+                    exps.add("(" + f.expression + ")");
+                    names.putAll(f.names);
+                    values.putAll(f.values);
+                }
+                filterExp = String.join(" AND ", exps);
+            }
+            QueryRequest request = QueryRequest.builder().tableName(context.tableName()).indexName(indexName).keyConditionExpression(keyCondition).filterExpression(filterExp).expressionAttributeNames(names).expressionAttributeValues(values).limit(PAGE_SIZE).exclusiveStartKey(exclusiveStartKey).build();
+            QueryResponse response = dynamoDbClient.query(request);
+            return new Pair<>(response.items(), response.lastEvaluatedKey());
+        });
+    }
+
+    private AttributeValue buildAv(String value, Attributes.Type type) {
+        AttributeValue.Builder b = AttributeValue.builder();
+        if (type == Attributes.Type.NUMBER) b.n(value);
+        else if (type == Attributes.Type.BOOLEAN) b.bool(Boolean.parseBoolean(value));
+        else b.s(value);
+        return b.build();
+    }
+
+    private FilterExpression attributeValueToFilter(String attributeName, String value, Attributes.Type type) {
+        ValueToFilterParser parser = new EqualsParser();
+        if (parser.matches(value)) return parser.parse(attributeName, value, type);
+        parser = new NotEqualsParser();
+        if (parser.matches(value)) return parser.parse(attributeName, value, type);
+        parser = new BeginsWithParser();
+        if (parser.matches(value)) return parser.parse(attributeName, value, type);
+        parser = new ContainsParser();
+        if (parser.matches(value)) return parser.parse(attributeName, value, type);
+        parser = new NotContainsParser();
+        if (parser.matches(value)) return parser.parse(attributeName, value, type);
+        parser = new ExistsParser();
+        if (parser.matches(value)) return parser.parse(attributeName, value, type);
+        parser = new NotExistsParser();
+        if (parser.matches(value)) return parser.parse(attributeName, value, type);
+        return null;
+    }
+
+    private CompletableFuture<Void> processItemAsync(String json, boolean isRaw, Consumer<Map<String, AttributeValue>> command) {
         try {
-            Item item = isRaw ? rawJsonToItem(json) : Item.fromJSON(json);
+            Map<String, AttributeValue> item = isRaw ? Utils.fromRawJson(json) : Utils.fromSimpleJson(json);
             return runAsync(() -> command.accept(item));
         } catch (JsonProcessingException e) {
             return CompletableFuture.failedFuture(e);
@@ -314,153 +467,69 @@ public class TableGridController {
     }
 
     private CompletableFuture<Void> createItem(String json, boolean isRaw) {
-        return processItemAsync(json, isRaw, table::putItem);
+        return processItemAsync(json, isRaw, item -> {
+            PutItemRequest request = PutItemRequest.builder().tableName(context.tableName()).item(item).build();
+            dynamoDbClient.putItem(request);
+        });
     }
 
     private CompletableFuture<Void> updateItem(String json, boolean isRaw) {
-        return processItemAsync(json, isRaw, table::putItem);
+        return processItemAsync(json, isRaw, item -> {
+            PutItemRequest request = PutItemRequest.builder().tableName(context.tableName()).item(item).build();
+            dynamoDbClient.putItem(request);
+        });
     }
 
-    private CompletableFuture<Void> patchItems(List<Item> items, String jsonPatch, boolean isRaw) {
+    private CompletableFuture<Void> patchItems(List<Map<String, AttributeValue>> items, String jsonPatch, boolean isRaw) {
         if (items.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
-
-        return processItemAsync(jsonPatch, isRaw, patch -> items.forEach(item -> {
-            UpdateItemSpec updateItemSpec = new UpdateItemSpec();
-            if (range() == null) {
-                updateItemSpec.withPrimaryKey(hash(), item.get(hash()));
-            } else {
-                updateItemSpec.withPrimaryKey(hash(), item.get(hash()), range(), item.get(range()));
+        return processItemAsync(jsonPatch, isRaw, patch -> items.forEach(oldItem -> {
+            StringBuilder updateExp = new StringBuilder("SET ");
+            Map<String, String> names = new HashMap<>();
+            Map<String, AttributeValue> values = new HashMap<>();
+            int i = 0;
+            for (Map.Entry<String, AttributeValue> entry : patch.entrySet()) {
+                String attr = entry.getKey();
+                String attrPH = "#a" + i;
+                String valPH = ":v" + i;
+                if (i > 0) updateExp.append(", ");
+                updateExp.append(attrPH + " = " + valPH);
+                names.put(attrPH, attr);
+                values.put(valPH, entry.getValue());
+                i++;
             }
-
-            updateItemSpec.withAttributeUpdate(
-                    asStream(patch.attributes())
-                            .map(entry -> new AttributeUpdate(entry.getKey()).put(entry.getValue()))
-                            .collect(Collectors.toList())
-            );
-
-            table.updateItem(updateItemSpec);
+            Map<String, AttributeValue> key = new HashMap<>();
+            key.put(hash(), oldItem.get(hash()));
+            if (range() != null) key.put(range(), oldItem.get(range()));
+            UpdateItemRequest request = UpdateItemRequest.builder().tableName(context.tableName()).key(key).updateExpression(updateExp.toString()).expressionAttributeNames(names).expressionAttributeValues(values).build();
+            dynamoDbClient.updateItem(request);
         }));
     }
 
-    private CompletableFuture<ItemCollection<ScanOutcome>> scanItems(Map<String, SimpleStringProperty> attributeFilterMap) {
-        return supplyAsync(() -> {
-            ScanSpec scanSpec = new ScanSpec();
-            List<ScanFilter> filters = attributeFilterMap.entrySet().stream()
-                    .filter(entry -> Objects.nonNull(entry.getValue().get()) && entry.getValue().get().trim().length() > 0)
-                    .map(entry -> attributeValueToFilter(entry.getKey(), entry.getValue().get(), tableModel.getTableDef().getAttributeTypesMap().get(entry.getKey()), ScanFilter::new))
-                    .toList();
-            if (!filters.isEmpty()) {
-                scanSpec.withScanFilters(filters.toArray(new ScanFilter[]{}));
-            }
-            LOG.fine(() -> String.format("Scan %1s = %2s", table.getTableName(), logAsJson(scanSpec)));
-            return table.scan(scanSpec.withMaxPageSize(PAGE_SIZE));
-        });
-    }
-
-    private QuerySpec buildQuerySpec(String hashName, String rangeName, Map<String, SimpleStringProperty> attributeFilterMap) {
-        QuerySpec querySpec = new QuerySpec();
-        querySpec.withHashKey(hashName, attributeFilterMap.get(hashName).get());
-        if (rangeName != null && !StringUtils.isNullOrEmpty(attributeFilterMap.get(rangeName).get())) {
-            querySpec.withRangeKeyCondition(new RangeKeyCondition(rangeName).eq(attributeFilterMap.get(rangeName).get()));
-        }
-        List<QueryFilter> filters = attributeFilterMap.entrySet().stream()
-                .filter(entry -> !entry.getKey().equals(hashName) && !entry.getKey().equals(rangeName))
-                .filter(entry -> !StringUtils.isNullOrEmpty(entry.getValue().get()))
-                .map(entry -> attributeValueToFilter(entry.getKey(), entry.getValue().get(), tableModel.getTableDef().getAttributeTypesMap().get(entry.getKey()), QueryFilter::new))
-                .toList();
-        if (!filters.isEmpty()) {
-            querySpec.withQueryFilters(filters.toArray(new QueryFilter[]{}));
-        }
-
-        return querySpec.withMaxPageSize(PAGE_SIZE);
-    }
-
-    private CompletableFuture<ItemCollection<QueryOutcome>> queryTableItems(QuerySpec querySpec) {
-        return supplyAsync(() -> {
-            LOG.fine(() -> String.format("Query %1s = %2s", table.getTableName(), logAsJson(querySpec)));
-            return table.query(querySpec);
-        });
-    }
-
-    private CompletableFuture<ItemCollection<QueryOutcome>> queryIndexItems(QuerySpec querySpec, Index index) {
-        return supplyAsync(() -> {
-            LOG.fine(() -> String.format("Query %1s = %2s", index.getIndexName(), logAsJson(querySpec)));
-            return index.query(querySpec);
-        });
-    }
-
-
-    private CompletableFuture<Void> delete(List<Item> items) {
+    private CompletableFuture<Void> delete(List<Map<String, AttributeValue>> items) {
         return runAsync(() -> Observable.fromIterable(items)
                 .buffer(25)
                 .map(list -> {
-                    TableWriteItems deleteItems = new TableWriteItems(table.getTableName());
-                    list.forEach(item -> {
-                        if (range() == null) {
-                            deleteItems.addHashOnlyPrimaryKeyToDelete(hash(), item.get(hash()));
-                        } else {
-                            deleteItems.addHashAndRangePrimaryKeyToDelete(hash(), item.get(hash()), range(), item.get(range()));
-                        }
-                    });
-                    return deleteItems;
+                    Map<String, List<WriteRequest>> requestItems = new HashMap<>();
+                    List<WriteRequest> writes = list.stream()
+                            .map(item -> {
+                                Map<String, AttributeValue> key = new HashMap<>();
+                                key.put(hash(), item.get(hash()));
+                                if (range() != null) key.put(range(), item.get(range()));
+                                return WriteRequest.builder().deleteRequest(DeleteRequest.builder().key(key).build()).build();
+                            })
+                            .toList();
+                    requestItems.put(context.tableName(), writes);
+                    return BatchWriteItemRequest.builder().requestItems(requestItems).build();
                 })
-                .subscribe(documentClient::batchWriteItem)
+                .subscribe(dynamoDbClient::batchWriteItem)
         );
     }
 
-    /**
-     * sort attributes before bindings
-     */
-    private void bindToModel(DescribeTableResult describeTable) {
-        TableDescription originalTableDescription = describeTable.getTable();
-        tableModel.setOriginalTableDescription(originalTableDescription);
-
-        getHashKey(describeTable).ifPresent(tableModel.getTableDef()::setHashAttribute);
-        getRangeKey(describeTable).ifPresent(tableModel.getTableDef()::setRangeAttribute);
-
-        Map<String, String> attributes = new TreeMap<>(KEYS_FIRST(hash(), range()));
-        attributes.putAll(
-                originalTableDescription.getAttributeDefinitions().stream()
-                        .collect(Collectors.toMap(
-                                AttributeDefinition::getAttributeName,
-                                AttributeDefinition::getAttributeType))
-        );
-
-        attributes.forEach((name, type) -> tableModel.getTableDef().getAttributeTypesMap().put(name, fromDynamoDBType(type)));
-
-        tableModel.getTableDef().setTotalCount(originalTableDescription.getItemCount());
-    }
-
-    private void bindToModel(Pair<List<Item>, Page<Item, ?>> pair) {
-        Map<String, Type> attributesTypes = new TreeMap<>(KEYS_FIRST(hash(), range()));
-        attributesTypes.putAll(defineAttributesTypes(pair.getKey()));
-
-        tableModel.getTableDef().getAttributeTypesMap().putAll(attributesTypes);
-        tableModel.setCurrentPage(pair.getValue());
-        tableModel.getRows().addAll(pair.getKey());
-    }
-
-    private void bindToModel(TableDef tableDef) {
-        tableDef.getAttributeTypesMap().keySet().forEach(attr -> tableModel.getAttributeFilterMap().computeIfAbsent(attr, __ -> new SimpleStringProperty()));
-    }
-
-    private void applyContext() {
-        if (context.propertyName() != null && context.propertyValue() != null) {
-            tableModel.getAttributeFilterMap().computeIfAbsent(context.propertyName(), __ -> new SimpleStringProperty()).set(context.propertyValue());
-        }
-    }
-
-    /**
-     * Check that filters map has not null or not empty value for the attribute
-     *
-     * @param attr attribute for checking
-     * @return true if attribute has some value
-     */
     private boolean notBlankFilterValue(String attr) {
         SimpleStringProperty property = tableModel.getAttributeFilterMap().get(attr);
-        return property != null && !StringUtils.isNullOrEmpty(property.get());
+        return property != null && !StringUtils.isEmpty(property.get());
     }
 
     private String hash() {
@@ -473,5 +542,11 @@ public class TableGridController {
 
     public void openUrl(String url) {
         hostServices.showDocument(url);
+    }
+
+    private void applyContext() {
+        if (context.propertyName() != null && context.propertyValue() != null) {
+            tableModel.getAttributeFilterMap().computeIfAbsent(context.propertyName(), __ -> new SimpleStringProperty()).set(context.propertyValue());
+        }
     }
 }

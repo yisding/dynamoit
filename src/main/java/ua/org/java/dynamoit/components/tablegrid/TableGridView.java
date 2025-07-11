@@ -17,7 +17,7 @@
 
 package ua.org.java.dynamoit.components.tablegrid;
 
-import com.amazonaws.services.dynamodbv2.document.Item;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.ListChangeListener;
@@ -39,6 +39,7 @@ import ua.org.java.dynamoit.widgets.ClearableTextField;
 
 import java.io.File;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -48,6 +49,8 @@ import java.util.function.Supplier;
 import static atlantafx.base.theme.Styles.BUTTON_ICON;
 import static javafx.beans.binding.Bindings.*;
 import static ua.org.java.dynamoit.utils.Utils.copyToClipboard;
+
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class TableGridView extends VBox {
 
@@ -59,7 +62,7 @@ public class TableGridView extends VBox {
 
     private final TableGridController controller;
     private Button clearFilterButton;
-    private final TableView<Item> tableView = new TableView<>();
+    private final TableView<Map<String, AttributeValue>> tableView = new TableView<>();
 
     private Consumer<TableGridContext> onSearchInTable;
 
@@ -180,7 +183,7 @@ public class TableGridView extends VBox {
                 )),
                 DX.create(() -> this.tableView, tableView -> {
 //                    tableView.getStyleClass().addAll(INTERACTIVE);
-                    tableView.getColumns().add(DX.create((Supplier<TableColumn<Item, Number>>) TableColumn::new, column -> {
+                    tableView.getColumns().add(DX.create((Supplier<TableColumn<Map<String, AttributeValue>, Number>>) TableColumn::new, column -> {
                         column.prefWidthProperty().bind(createIntegerBinding(() -> {
                             int charsNumber = String.valueOf(tableModel.rowsSizeProperty().get()).length();
                             return PADDING + charsNumber * FONT_SIZE;
@@ -196,10 +199,14 @@ public class TableGridView extends VBox {
                     tableView.setItems(tableModel.getRows());
                     tableView.setSkin(new MyTableViewSkin<>(tableView));
                     tableView.setRowFactory(param -> {
-                        TableRow<Item> tableRow = new TableRow<>();
+                        TableRow<Map<String, AttributeValue>> tableRow = new TableRow<>();
                         tableRow.setOnMouseClicked(event -> {
                             if (event.getClickCount() == 2 && tableRow.getItem() != null) {
-                                showEditItemDialog(tableRow.getItem().toJSONPretty());
+                                try {
+                                    showEditItemDialog(Utils.toSimpleJson(tableRow.getItem()));
+                                } catch (JsonProcessingException e) {
+                                    throw new RuntimeException(e);
+                                }
                             }
                         });
                         return tableRow;
@@ -213,7 +220,11 @@ public class TableGridView extends VBox {
                                         showCompareDialog();
                                     }
                                 } else {
-                                    showEditItemDialog(tableView.getSelectionModel().getSelectedItem().toJSONPretty());
+                                    try {
+                                        showEditItemDialog(Utils.toSimpleJson(tableView.getSelectionModel().getSelectedItem()));
+                                    } catch (JsonProcessingException e) {
+                                        throw new RuntimeException(e);
+                                    }
                                 }
                             }
                             if (KeyCode.DELETE == event.getCode()) {
@@ -232,7 +243,7 @@ public class TableGridView extends VBox {
             }
         });
 
-        tableModel.getRows().addListener((ListChangeListener<Item>) c -> {
+        tableModel.getRows().addListener((ListChangeListener<Map<String, AttributeValue>>) c -> {
             while (c.next()) {
                 if (c.wasAdded()) {
                     tableView.scrollTo(c.getFrom());
@@ -262,7 +273,7 @@ public class TableGridView extends VBox {
 
     }
 
-    private TableColumn<Item, String> buildTableColumn(String attrName) {
+    private TableColumn<Map<String, AttributeValue>, String> buildTableColumn(String attrName) {
         SimpleStringProperty filterProperty = tableModel.getAttributeFilterMap().computeIfAbsent(attrName, s -> new SimpleStringProperty());
 
         return DX.create(TableColumn::new, filter -> {
@@ -273,7 +284,7 @@ public class TableGridView extends VBox {
                 textField.setOnAction(event -> reloadData());
                 textField.setOnClear(event -> reloadData());
             }));
-            filter.getColumns().add(DX.create((Supplier<TableColumn<Item, String>>) TableColumn::new, column -> {
+            filter.getColumns().add(DX.create((Supplier<TableColumn<Map<String, AttributeValue>, String>>) TableColumn::new, column -> {
                 if (attrName.equals(tableModel.getTableDef().getHashAttribute())) {
                     column.setGraphic(DX.icon("icons/key.png"));
                 }
@@ -284,11 +295,15 @@ public class TableGridView extends VBox {
                 column.setId(attrName);
                 column.setPrefWidth(200);
                 column.setCellValueFactory(param -> {
-                    Object value = param.getValue().get(attrName);
-                    return new SimpleStringProperty(value != null ? value.toString() : "");
+                    AttributeValue av = param.getValue().get(attrName);
+                    String value = Optional.ofNullable(av)
+                            .map(Utils::attributeValueToObject)
+                            .map(Object::toString)
+                            .orElse("");
+                    return new SimpleStringProperty(value);
                 });
                 column.setCellFactory(param -> {
-                    TableCell<Item, String> cell = new TableCell<>();
+                    TableCell<Map<String, AttributeValue>, String> cell = new TableCell<>();
                     if (Attributes.Type.NUMBER == tableModel.getTableDef().getAttributeTypesMap().get(attrName)) {
                         cell.setAlignment(Pos.CENTER_RIGHT);
                     }
@@ -304,7 +319,7 @@ public class TableGridView extends VBox {
         });
     }
 
-    private void highlightCellValue(ObservableList<Highlighter.Criteria> criteriaList, TableCell<Item, String> cell) {
+    private void highlightCellValue(ObservableList<Highlighter.Criteria> criteriaList, TableCell<Map<String, AttributeValue>, String> cell) {
         criteriaList.stream()
                 .filter(criteria -> criteria.match(cell.getText()))
                 .findFirst()
@@ -313,7 +328,7 @@ public class TableGridView extends VBox {
                 ), () -> cell.setStyle(null));
     }
 
-    private void attachCellContextMenu(TableCell<Item, String> cell, String attrName) {
+    private void attachCellContextMenu(TableCell<Map<String, AttributeValue>, String> cell, String attrName) {
         cell.setOnContextMenuRequested(event -> {
             if (cell.getText() != null && cell.getText().trim().length() != 0) {
                 String value = Utils.truncateWithDots(cell.textProperty().get());
@@ -352,7 +367,11 @@ public class TableGridView extends VBox {
                             menuEdit.setGraphic(DX.icon("icons/page_edit.png"));
                             menuEdit.setOnAction(editEvent -> {
                                 if (editEvent.getTarget().equals(editEvent.getSource())) {
-                                    showEditItemDialog(cell.getTableRow().getItem().toJSONPretty());
+                                    try {
+                                        showEditItemDialog(Utils.toSimpleJson(cell.getTableRow().getItem()));
+                                    } catch (JsonProcessingException e) {
+                                        throw new RuntimeException(e);
+                                    }
                                 }
                             });
                         }),
@@ -361,7 +380,11 @@ public class TableGridView extends VBox {
                             menuEdit.setGraphic(DX.icon("icons/page_add.png"));
                             menuEdit.setOnAction(editEvent -> {
                                 if (editEvent.getTarget().equals(editEvent.getSource())) {
-                                    showCreateItemDialog(cell.getTableRow().getItem().toJSONPretty());
+                                    try {
+                                        showCreateItemDialog(Utils.toSimpleJson(cell.getTableRow().getItem()));
+                                    } catch (JsonProcessingException e) {
+                                        throw new RuntimeException(e);
+                                    }
                                 }
                             });
                         })
@@ -404,16 +427,20 @@ public class TableGridView extends VBox {
 
     private void showCompareDialog() {
         if (tableView.getSelectionModel().getSelectedItems().size() >= 2) {
-            Item item1 = tableView.getSelectionModel().getSelectedItems().get(0);
-            Item item2 = tableView.getSelectionModel().getSelectedItems().get(1);
+            Map<String, AttributeValue> item1 = tableView.getSelectionModel().getSelectedItems().get(0);
+            Map<String, AttributeValue> item2 = tableView.getSelectionModel().getSelectedItems().get(1);
 
-            CompareDialog dialog = new CompareDialog(item1.toJSONPretty(), item2.toJSONPretty());
-            dialog.showAndWait();
+            try {
+                CompareDialog dialog = new CompareDialog(Utils.toSimpleJson(item1), Utils.toSimpleJson(item2));
+                dialog.showAndWait();
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
     private void deleteSelectedItems() {
-        List<Item> items = tableView.getSelectionModel().getSelectedItems();
+        List<Map<String, AttributeValue>> items = tableView.getSelectionModel().getSelectedItems();
         Alert deleteConfirmation = new Alert(Alert.AlertType.CONFIRMATION, "Do you really want to delete " + items.size() + " item(s)?");
         Optional<ButtonType> pressedButton = deleteConfirmation.showAndWait();
         pressedButton.ifPresent(buttonType -> {

@@ -17,8 +17,9 @@
 
 package ua.org.java.dynamoit.components.tablegrid;
 
-import com.amazonaws.services.dynamodbv2.document.ScanFilter;
-import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import ua.org.java.dynamoit.components.tablegrid.parser.FilterExpression;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import java.util.Map;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -27,29 +28,36 @@ public class AttributesTest {
 
     @Test
     public void testAttributeValueToFilter() {
-        ScanFilter scanFilter = Attributes.attributeValueToFilter("name", "John", Attributes.Type.STRING, ScanFilter::new);
-        assertEquals(ComparisonOperator.EQ, scanFilter.getComparisonOperator());
-        assertArrayEquals(new Object[]{"John"}, scanFilter.getValues());
+        FilterExpression fe = Attributes.attributeValueToFilter("name", "John", Attributes.Type.STRING);
+        assertEquals("#name = :name", fe.expression);
+        assertEquals(Map.of("#name", "name"), fe.names);
+        assertEquals(Map.of(":name", AttributeValue.builder().s("John").build()), fe.values);
 
-        scanFilter = Attributes.attributeValueToFilter("name", "^John", Attributes.Type.STRING, ScanFilter::new);
-        assertEquals(ComparisonOperator.BEGINS_WITH, scanFilter.getComparisonOperator());
-        assertArrayEquals(new Object[]{"John"}, scanFilter.getValues());
+        fe = Attributes.attributeValueToFilter("name", "^John", Attributes.Type.STRING);
+        assertEquals("begins_with(#name, :name)", fe.expression);
+        assertEquals(Map.of("#name", "name"), fe.names);
+        assertEquals(Map.of(":name", AttributeValue.builder().s("John").build()), fe.values);
 
-        scanFilter = Attributes.attributeValueToFilter("name", "~John", Attributes.Type.STRING, ScanFilter::new);
-        assertEquals(ComparisonOperator.CONTAINS, scanFilter.getComparisonOperator());
-        assertArrayEquals(new Object[]{"John"}, scanFilter.getValues());
+        fe = Attributes.attributeValueToFilter("name", "~John", Attributes.Type.STRING);
+        assertEquals("contains(#name, :name)", fe.expression);
+        assertEquals(Map.of("#name", "name"), fe.names);
+        assertEquals(Map.of(":name", AttributeValue.builder().s("John").build()), fe.values);
 
-        scanFilter = Attributes.attributeValueToFilter("name", null, Attributes.Type.STRING, ScanFilter::new);
-        assertNull(scanFilter.getComparisonOperator());
+        fe = Attributes.attributeValueToFilter("name", null, Attributes.Type.STRING);
+        assertNull(fe);
 
-        scanFilter = Attributes.attributeValueToFilter("name", "", Attributes.Type.STRING, ScanFilter::new);
-        assertNull(scanFilter.getComparisonOperator());
+        fe = Attributes.attributeValueToFilter("name", "", Attributes.Type.STRING);
+        assertNull(fe);
 
-        scanFilter = Attributes.attributeValueToFilter("name", "*", Attributes.Type.STRING, ScanFilter::new);
-        assertEquals(ComparisonOperator.EQ, scanFilter.getComparisonOperator());
+        fe = Attributes.attributeValueToFilter("name", "*", Attributes.Type.STRING);
+        assertEquals("#name = :name", fe.expression);
+        assertEquals(Map.of("#name", "name"), fe.names);
+        assertEquals(Map.of(":name", AttributeValue.builder().s("*").build()), fe.values);
 
-        scanFilter = Attributes.attributeValueToFilter("name", "**", Attributes.Type.STRING, ScanFilter::new);
-        assertEquals(ComparisonOperator.EQ, scanFilter.getComparisonOperator());
+        fe = Attributes.attributeValueToFilter("name", "**", Attributes.Type.STRING);
+        assertEquals("#name = :name", fe.expression);
+        assertEquals(Map.of("#name", "name"), fe.names);
+        assertEquals(Map.of(":name", AttributeValue.builder().s("**").build()), fe.values);
     }
 }
 

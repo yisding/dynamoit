@@ -17,8 +17,8 @@
 
 package ua.org.java.dynamoit.components.tablegrid;
 
-import com.amazonaws.services.dynamodbv2.model.GlobalSecondaryIndexDescription;
-import com.amazonaws.services.dynamodbv2.model.LocalSecondaryIndexDescription;
+import software.amazon.awssdk.services.dynamodb.model.GlobalSecondaryIndex;
+import software.amazon.awssdk.services.dynamodb.model.LocalSecondaryIndex;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.*;
@@ -34,9 +34,12 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.Date;
 
 import static atlantafx.base.theme.Styles.FLAT;
 import static ua.org.java.dynamoit.utils.Utils.copyToClipboard;
+import software.amazon.awssdk.services.dynamodb.model.LocalSecondaryIndexDescription;
+import software.amazon.awssdk.services.dynamodb.model.GlobalSecondaryIndexDescription;
 
 public class TableInfoDialog extends Dialog<Void> {
 
@@ -60,14 +63,14 @@ public class TableInfoDialog extends Dialog<Void> {
                 tab.setContent(buildTableOverview());
             }));
 
-            if (this.tableModel.getOriginalTableDescription().getLocalSecondaryIndexes() != null) {
+            if (this.tableModel.getOriginalTableDescription().localSecondaryIndexes() != null) {
                 tabPane.getTabs().add(DX.create(Tab::new, tab -> {
                     tab.setText("Local indexes");
                     tab.setContent(buildLocalIndexes());
                 }));
             }
 
-            if (this.tableModel.getOriginalTableDescription().getGlobalSecondaryIndexes() != null) {
+            if (this.tableModel.getOriginalTableDescription().globalSecondaryIndexes() != null) {
                 tabPane.getTabs().add(DX.create(Tab::new, tab -> {
                     tab.setText("Global indexes");
                     tab.setContent(buildGlobalIndexes());
@@ -94,24 +97,24 @@ public class TableInfoDialog extends Dialog<Void> {
                                 tableModel.getProfileModel().getRegion(),
                                 tableModel.getTableName()
                         );
-                        link.setText(tableModel.getOriginalTableDescription().getTableName().trim());
+                        link.setText(tableModel.getOriginalTableDescription().tableName().trim());
                         link.setOnMouseClicked(event -> openUrl.accept(tableLink));
                     }),
-                    new Label(tableModel.getOriginalTableDescription().getTableArn()),
-                    new Label(DateFormat.getInstance().format(tableModel.getOriginalTableDescription().getCreationDateTime())),
-                    new Label(tableModel.getOriginalTableDescription().getTableSizeBytes() + " bytes"),
+                    new Label(tableModel.getOriginalTableDescription().tableArn()),
+                    new Label(DateFormat.getInstance().format(Date.from(tableModel.getOriginalTableDescription().creationDateTime()))),
+                    new Label(tableModel.getOriginalTableDescription().tableSizeBytes() + " bytes"),
                     new Label(tableModel.getProfileModel().getRegion())
             );
 
             gridPane.addColumn(2,
-                    copyClipboardWidget(() -> tableModel.getOriginalTableDescription().getTableName()),
-                    copyClipboardWidget(() -> tableModel.getOriginalTableDescription().getTableArn()),
-                    copyClipboardWidget(() -> DateFormat.getInstance().format(tableModel.getOriginalTableDescription().getCreationDateTime())),
-                    copyClipboardWidget(() -> "" + tableModel.getOriginalTableDescription().getTableSizeBytes()),
+                    copyClipboardWidget(() -> tableModel.getOriginalTableDescription().tableName()),
+                    copyClipboardWidget(() -> tableModel.getOriginalTableDescription().tableArn()),
+                    copyClipboardWidget(() -> DateFormat.getInstance().format(Date.from(tableModel.getOriginalTableDescription().creationDateTime()))),
+                    copyClipboardWidget(() -> "" + tableModel.getOriginalTableDescription().tableSizeBytes()),
                     copyClipboardWidget(() -> tableModel.getProfileModel().getRegion())
             );
 
-            String streamArn = tableModel.getOriginalTableDescription().getLatestStreamArn();
+            String streamArn = tableModel.getOriginalTableDescription().latestStreamArn();
             if (streamArn != null && !streamArn.isBlank()) {
                 gridPane.addRow(gridPane.getRowCount(), DX.boldLabel("Stream:"), new Label(streamArn), copyClipboardWidget(() -> streamArn));
             }
@@ -120,7 +123,7 @@ public class TableInfoDialog extends Dialog<Void> {
 
     private Node buildLocalIndexes() {
         return DX.create(TableInfoDialog::buildEmptyGridPane, gridPane -> {
-            List<LocalSecondaryIndexDescription> indexes = this.tableModel.getOriginalTableDescription().getLocalSecondaryIndexes();
+            List<LocalSecondaryIndexDescription> indexes = this.tableModel.getOriginalTableDescription().localSecondaryIndexes();
             if (indexes != null) {
 
                 gridPane.getColumnConstraints().clear();
@@ -132,22 +135,22 @@ public class TableInfoDialog extends Dialog<Void> {
 
                 AtomicInteger startRow = new AtomicInteger();
                 indexes.forEach(indexDescription -> {
-                    gridPane.add(DX.boldLabel(indexDescription.getIndexName()), 0, startRow.get(), 3, 1);
-                    gridPane.add(copyClipboardWidget(indexDescription::getIndexName), 3, startRow.get());
+                    gridPane.add(DX.boldLabel(indexDescription.indexName()), 0, startRow.get(), 3, 1);
+                    gridPane.add(copyClipboardWidget(indexDescription::indexName), 3, startRow.get());
 
                     startRow.incrementAndGet();
 
-                    indexDescription.getKeySchema().forEach(keySchemaElement -> {
-                        gridPane.add(DX.boldLabel(keySchemaElement.getKeyType() + ":"), 1, startRow.get());
-                        gridPane.add(new Label(keySchemaElement.getAttributeName()), 2, startRow.getAndIncrement());
+                    indexDescription.keySchema().forEach(keySchemaElement -> {
+                        gridPane.add(DX.boldLabel(keySchemaElement.keyType() + ":"), 1, startRow.get());
+                        gridPane.add(new Label(keySchemaElement.attributeName()), 2, startRow.getAndIncrement());
                     });
 
                     gridPane.add(DX.boldLabel("Projection type:"), 1, startRow.get());
-                    gridPane.add(new Label(indexDescription.getProjection().getProjectionType()), 2, startRow.getAndIncrement());
+                    gridPane.add(new Label(indexDescription.projection().projectionType().toString()), 2, startRow.getAndIncrement());
 
-                    if (indexDescription.getProjection().getNonKeyAttributes() != null) {
+                    if (indexDescription.projection().nonKeyAttributes() != null) {
                         gridPane.add(DX.boldLabel("Projection attributes:"), 1, startRow.get());
-                        gridPane.add(new Label(String.join(",", indexDescription.getProjection().getNonKeyAttributes())), 2, startRow.getAndIncrement());
+                        gridPane.add(new Label(String.join(",", indexDescription.projection().nonKeyAttributes())), 2, startRow.getAndIncrement());
                     }
                 });
 
@@ -157,7 +160,7 @@ public class TableInfoDialog extends Dialog<Void> {
 
     private Node buildGlobalIndexes() {
         return DX.create(TableInfoDialog::buildEmptyGridPane, gridPane -> {
-            List<GlobalSecondaryIndexDescription> globalSecondaryIndexes = this.tableModel.getOriginalTableDescription().getGlobalSecondaryIndexes();
+            List<GlobalSecondaryIndexDescription> globalSecondaryIndexes = this.tableModel.getOriginalTableDescription().globalSecondaryIndexes();
             if (globalSecondaryIndexes != null) {
 
                 gridPane.getColumnConstraints().clear();
@@ -169,22 +172,22 @@ public class TableInfoDialog extends Dialog<Void> {
 
                 AtomicInteger startRow = new AtomicInteger();
                 globalSecondaryIndexes.forEach(indexDescription -> {
-                    gridPane.add(DX.boldLabel(indexDescription.getIndexName()), 0, startRow.get(), 3, 1);
-                    gridPane.add(copyClipboardWidget(indexDescription::getIndexName), 3, startRow.get());
+                    gridPane.add(DX.boldLabel(indexDescription.indexName()), 0, startRow.get(), 3, 1);
+                    gridPane.add(copyClipboardWidget(indexDescription::indexName), 3, startRow.get());
 
                     startRow.incrementAndGet();
 
-                    indexDescription.getKeySchema().forEach(keySchemaElement -> {
-                        gridPane.add(DX.boldLabel(keySchemaElement.getKeyType() + ":"), 1, startRow.get());
-                        gridPane.add(new Label(keySchemaElement.getAttributeName()), 2, startRow.getAndIncrement());
+                    indexDescription.keySchema().forEach(keySchemaElement -> {
+                        gridPane.add(DX.boldLabel(keySchemaElement.keyType() + ":"), 1, startRow.get());
+                        gridPane.add(new Label(keySchemaElement.attributeName()), 2, startRow.getAndIncrement());
                     });
 
                     gridPane.add(DX.boldLabel("Projection type:"), 1, startRow.get());
-                    gridPane.add(new Label(indexDescription.getProjection().getProjectionType()), 2, startRow.getAndIncrement());
+                    gridPane.add(new Label(indexDescription.projection().projectionType().toString()), 2, startRow.getAndIncrement());
 
-                    if (indexDescription.getProjection().getNonKeyAttributes() != null) {
+                    if (indexDescription.projection().nonKeyAttributes() != null) {
                         gridPane.add(DX.boldLabel("Projection attributes:"), 1, startRow.get());
-                        gridPane.add(new Label(String.join(",", indexDescription.getProjection().getNonKeyAttributes())), 2, startRow.getAndIncrement());
+                        gridPane.add(new Label(String.join(",", indexDescription.projection().nonKeyAttributes())), 2, startRow.getAndIncrement());
                     }
                 });
 

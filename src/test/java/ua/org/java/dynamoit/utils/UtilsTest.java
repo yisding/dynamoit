@@ -51,18 +51,10 @@ public class UtilsTest {
         String newLine = System.getProperty("line.separator");
 
         String document1 = convertJsonDocument("{\"name\": \"user\"}", true);
-        assertEquals(String.join(newLine,
-                "{",
-                "  \"name\" : {",
-                "    \"s\" : \"user\"",
-                "  }",
-                "}"), document1);
+        assertEquals("{\n  \"name\" : {\n    \"s\" : \"user\"\n  }\n}", document1);
 
         String document2 = convertJsonDocument("{\"name\": {\"s\": \"user\"}}", false);
-        assertEquals(String.join(newLine,
-                "{",
-                "  \"name\" : \"user\"",
-                "}"), document2);
+        assertEquals("{\n  \"name\" : \"user\"\n}", document2);
     }
 
 }

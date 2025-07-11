@@ -17,30 +17,31 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.QueryFilter;
-import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+
+import java.util.Map;
+import ua.org.java.dynamoit.components.tablegrid.parser.FilterExpression;
 
 public class ExistsParserTest {
 
     @Test
     public void test() {
-        assertFalse(new ExistsParser<QueryFilter>("", null).matches());
-        assertFalse(new ExistsParser<QueryFilter>(" ", null).matches());
-        assertFalse(new ExistsParser<QueryFilter>("$hello", null).matches());
-        assertFalse(new ExistsParser<QueryFilter>("hello$", null).matches());
-        assertFalse(new ExistsParser<QueryFilter>("hello$hello", null).matches());
+        assertFalse(new ExistsParser().matches(""));
+        assertFalse(new ExistsParser().matches(" "));
+        assertFalse(new ExistsParser().matches("$hello"));
+        assertFalse(new ExistsParser().matches("hello$"));
+        assertFalse(new ExistsParser().matches("hello$hello"));
 
-        QueryFilter filter = new QueryFilter("attr");
-        ExistsParser<QueryFilter> parser = new ExistsParser<>("$", filter);
-        assertTrue(parser.matches());
+        ExistsParser parser = new ExistsParser();
+        assertTrue(parser.matches("$"));
 
-        parser.parse();
+        FilterExpression fe = parser.parse("attr", "$", null);
 
-        assertEquals(ComparisonOperator.NOT_NULL, filter.getComparisonOperator());
-        assertNull(filter.getValues());
+        assertEquals("attribute_exists(#attr)", fe.expression);
+        assertEquals(Map.of("#attr", "attr"), fe.names);
+        assertTrue(fe.values.isEmpty());
     }
 
 }

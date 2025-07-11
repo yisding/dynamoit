@@ -17,18 +17,13 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.internal.Filter;
+import ua.org.java.dynamoit.components.tablegrid.Attributes;
 
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-public class ExistsParser<T extends Filter<T>> extends BaseValueToFilterParser<T> {
+public class ExistsParser extends BaseValueToFilterParser {
 
-    private static final Pattern PATTERN = Pattern.compile("(^\\$$)");
-
-    public ExistsParser(String value, T filter) {
-        super(value, filter);
-    }
+    private static final Pattern PATTERN = Pattern.compile("\\$");
 
     @Override
     protected Pattern regPattern() {
@@ -36,7 +31,7 @@ public class ExistsParser<T extends Filter<T>> extends BaseValueToFilterParser<T
     }
 
     @Override
-    protected Consumer<String> termConsumer() {
-        return term -> filter.exists();
+    protected FilterExpression createExpression(String attributeName, String term, Attributes.Type type) {
+        return new FilterExpression("attribute_exists(#attr)", "#attr", attributeName);
     }
 }

@@ -17,8 +17,11 @@
 
 package ua.org.java.dynamoit.components.tablegrid.parser;
 
-import com.amazonaws.services.dynamodbv2.document.QueryFilter;
-import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import ua.org.java.dynamoit.components.tablegrid.parser.ContainsParser;
+import ua.org.java.dynamoit.components.tablegrid.parser.FilterExpression;
+import ua.org.java.dynamoit.components.tablegrid.Attributes.Type;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import java.util.Map;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -27,21 +30,21 @@ public class ContainsParserTest {
 
     @Test
     public void testBlank() {
-        assertFalse(new ContainsParser<QueryFilter>("", null).matches());
-        assertFalse(new ContainsParser<QueryFilter>(" ", null).matches());
-        assertTrue(new ContainsParser<QueryFilter>("~", null).matches());
+        assertFalse(new ContainsParser().matches(""));
+        assertFalse(new ContainsParser().matches(" "));
+        assertTrue(new ContainsParser().matches("~hello"));
     }
 
     @Test
     public void testValue() {
-        QueryFilter filter = new QueryFilter("attr");
-        ContainsParser<QueryFilter> parser = new ContainsParser<>("~hello", filter);
-        assertTrue(parser.matches());
+        ContainsParser parser = new ContainsParser();
+        assertTrue(parser.matches("~hello"));
 
-        parser.parse();
+        FilterExpression fe = parser.parse("attr", "~hello", Type.STRING);
 
-        assertEquals(ComparisonOperator.CONTAINS, filter.getComparisonOperator());
-        assertArrayEquals(new Object[]{"hello"}, filter.getValues());
+        assertEquals("contains(#attr, :attr)", fe.expression);
+        assertEquals(Map.of("#attr", "attr"), fe.names);
+        assertEquals(Map.of(":attr", AttributeValue.builder().s("hello").build()), fe.values);
     }
 
 }
