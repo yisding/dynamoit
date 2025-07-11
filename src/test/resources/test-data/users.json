@@ -1,0 +1,20 @@
+[
+  {
+    "id": {"S": "1"},
+    "name": {"S": "Alice"},
+    "email": {"S": "alice@example.com"},
+    "age": {"N": "30"}
+  },
+  {
+    "id": {"S": "2"},
+    "name": {"S": "Bob"},
+    "email": {"S": "bob@example.com"},
+    "age": {"N": "25"}
+  },
+  {
+    "id": {"S": "3"},
+    "name": {"S": "Charlie"},
+    "email": {"S": "charlie@example.com"},
+    "age": {"N": "35"}
+  }
+]

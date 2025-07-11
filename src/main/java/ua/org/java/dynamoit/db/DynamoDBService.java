@@ -79,17 +79,32 @@ public class DynamoDBService {
 
     public AmazonDynamoDB getOrCreateDynamoDBClient(ProfileDetails profileDetails) {
         return profileDynamoDBClientMap.computeIfAbsent(profileDetails.hashCode(), __ -> {
+            AmazonDynamoDBClientBuilder builder = AmazonDynamoDBClientBuilder.standard();
+            
+            // Check for test endpoint override
+            String endpointOverride = System.getProperty("aws.dynamodb.endpoint");
+            if (endpointOverride != null && !endpointOverride.isEmpty()) {
+                String region = System.getProperty("aws.region", "us-east-1");
+                String accessKey = System.getProperty("aws.accessKeyId", "fake");
+                String secretKey = System.getProperty("aws.secretAccessKey", "fake");
+                
+                return builder
+                        .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(endpointOverride, region))
+                        .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey)))
+                        .build();
+            }
+            
             if (profileDetails instanceof PreconfiguredProfileDetails p) {
-                return AmazonDynamoDBClientBuilder.standard()
+                return builder
                         .withCredentials(new ProfileCredentialsProvider(p.getName()))
                         .withRegion(p.getRegion())
                         .build();
             } else if (profileDetails instanceof LocalProfileDetails p) {
-                return AmazonDynamoDBClientBuilder.standard()
+                return builder
                         .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(p.getEndPoint(), ""))
                         .build();
             } else if (profileDetails instanceof RemoteProfileDetails p) {
-                return AmazonDynamoDBClientBuilder.standard()
+                return builder
                         .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials(p.getAccessKeyId(), p.getSecretKey())))
                         .withRegion(p.getRegion())
                         .build();

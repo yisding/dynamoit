@@ -1,0 +1,68 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+    
+    - name: Cache Maven dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Install xvfb for headless display
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb
+    
+    - name: Run E2E tests
+      run: |
+        # Set up virtual display for JavaFX
+        export DISPLAY=:99.0
+        Xvfb :99 -ac -screen 0 1280x1024x24 &
+        
+        # Run the E2E tests with headless configuration
+        mvn clean test \
+          -Dtest="ua.org.java.dynamoit.e2e.**" \
+          -Dtestfx.headless=true \
+          -Dprism.order=sw \
+          -Djava.awt.headless=true \
+          -Dglass.platform=Monocle \
+          -Dmonocle.platform=Headless \
+          --batch-mode
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          target/surefire-reports/
+          target/failsafe-reports/
+    
+    - name: Publish test results
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: E2E Test Results
+        path: target/surefire-reports/*.xml
+        reporter: java-junit

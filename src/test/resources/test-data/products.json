@@ -1,0 +1,14 @@
+[
+  {
+    "productId": {"S": "PROD-001"},
+    "category": {"S": "Electronics"},
+    "name": {"S": "Laptop"},
+    "price": {"N": "999.99"}
+  },
+  {
+    "productId": {"S": "PROD-002"},
+    "category": {"S": "Books"},
+    "name": {"S": "Java Programming"},
+    "price": {"N": "49.99"}
+  }
+]
