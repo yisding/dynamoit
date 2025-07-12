@@ -35,9 +35,9 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
-        <dagger.version>2.46.1</dagger.version>
+        <dagger.version>2.56.2</dagger.version>
         <javafx.version>21.0.1</javafx.version>
-        <aws.sdk.version>1.12.721</aws.sdk.version>
+        <aws.sdk.version>1.12.787</aws.sdk.version>
         <main.class>ua.org.java.dynamoit.Launcher</main.class>
         <fatJar.dir>${project.build.directory}/fatJar/</fatJar.dir>
         <destination.dir>${project.build.directory}/${project.name}</destination.dir>
@@ -300,7 +300,7 @@
         <dependency>
             <groupId>org.fxmisc.richtext</groupId>
             <artifactId>richtextfx</artifactId>
-            <version>0.11.0</version>
+            <version>0.11.5</version>
         </dependency>
         <!-- rx java -->
         <dependency>
@@ -316,12 +316,12 @@
         <dependency>
             <groupId>io.github.java-diff-utils</groupId>
             <artifactId>java-diff-utils</artifactId>
-            <version>4.12</version>
+            <version>4.16</version>
         </dependency>
         <dependency>
             <groupId>io.github.mkpaz</groupId>
             <artifactId>atlantafx-base</artifactId>
-            <version>2.0.0</version>
+            <version>2.1.0</version>
         </dependency>
         <!-- testing -->
         <dependency>
@@ -333,7 +333,7 @@
         <dependency>
             <groupId>org.easymock</groupId>
             <artifactId>easymock</artifactId>
-            <version>5.4.0</version>
+            <version>5.6.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -375,13 +375,13 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>1.19.3</version>
+            <version>1.21.3</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
-            <version>1.19.3</version>
+            <version>1.21.3</version>
             <scope>test</scope>
         </dependency>
         
