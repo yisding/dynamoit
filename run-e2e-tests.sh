@@ -35,6 +35,7 @@ print_usage() {
     echo "  table            Run table operation tests"
     echo "  performance      Run performance-focused tests"
     echo "  visible          Run tests in visible mode (for debugging)"
+    echo "  debug-visible    Run smoke test in visible mode with verbose output"
     echo "  help             Show this help message"
 }
 
@@ -53,6 +54,15 @@ check_java() {
         echo -e "${YELLOW}⚠️  Warning: Java 21 is recommended. Current version:${NC}"
         java -version
     fi
+    
+    # Check for macOS specific JavaFX issues
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo -e "${YELLOW}ℹ️  macOS detected - checking JavaFX display compatibility${NC}"
+        # Check if we're running on Apple Silicon
+        if [[ $(uname -m) == "arm64" ]]; then
+            echo -e "${YELLOW}ℹ️  Apple Silicon detected - ensure JavaFX is ARM64 compatible${NC}"
+        fi
+    fi
 }
 
 # Check display environment for visible mode
@@ -62,6 +72,11 @@ check_display_environment() {
         echo -e "${YELLOW}   Use headless mode instead or run locally${NC}"
         return 1
     fi
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo -e "${GREEN}✅ macOS display environment detected${NC}"
+    fi
+    
     return 0
 }
 
@@ -91,11 +106,11 @@ run_test() {
         
         maven_props="-Dtestfx.headless=false -Djava.awt.headless=false -Dtestfx.robot=glass"
         echo -e "${YELLOW}👀 Running in VISIBLE mode for debugging${NC}"
-        echo -e "${YELLOW}ℹ️  UI windows will appear during test execution${NC}"
+        echo -e "${YELLOW}ℹ️  UI windows should appear during test execution${NC}"
+        echo -e "${YELLOW}ℹ️  Tests will run slower to allow observation${NC}"
         
-        # Add slower timing and macOS compatibility for better visibility
-        maven_props="$maven_props -Dtestfx.robot.write_sleep=500 -Dtestfx.robot.key_sleep=500"
-        maven_props="$maven_props -Dapple.awt.application.name=DynamoIt -Dapple.laf.useScreenMenuBar=true"
+        # Add debugging properties and slower timing
+        maven_props="$maven_props -Dprism.verbose=true -Dtestfx.robot.write_sleep=200 -Dtestfx.robot.key_sleep=200"
     else
         maven_props="-Dtestfx.headless=true -Dprism.order=sw -Djava.awt.headless=true -Dglass.platform=Monocle -Dmonocle.platform=Headless"
         echo -e "${GREEN}🔧 Running in HEADLESS mode${NC}"
@@ -172,6 +187,13 @@ case "${1:-all}" in
         run_test "ua.org.java.dynamoit.e2e.**" "All E2E Tests (Visible Mode)" true
         ;;
     
+    "debug-visible")
+        echo -e "${YELLOW}🔍 Debug: Testing visible mode with verbose output${NC}"
+        echo -e "${YELLOW}This will run a simple test with maximum visibility${NC}"
+        echo -e "${YELLOW}You should see UI windows and detailed console output${NC}"
+        run_test "SmokeE2ETest" "Smoke Test (Debug Visible Mode)" true
+        ;;
+    
     "all")
         echo -e "${BLUE}Running complete E2E test suite...${NC}"
         echo "📋 Test Categories:"
@@ -211,5 +233,5 @@ echo -e "${BLUE}📁 Additional Resources:${NC}"
 echo "• Detailed results: target/surefire-reports/"
 echo "• Test documentation: COMPREHENSIVE_TEST_SCENARIOS.md"
 echo "• Run specific test: mvn test -Dtest='ClassName#methodName'"
-echo "• Debug mode: Use 'visible' option to see UI interactions"
+echo "• Debug mode: Use 'debug-visible' option to see UI interactions"
 echo "• E2E tests are excluded from 'mvn test' - use this script instead"

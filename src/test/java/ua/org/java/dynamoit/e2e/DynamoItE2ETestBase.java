@@ -51,7 +51,8 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
     @Container
     protected final GenericContainer<?> DYNAMO_DB_LOCAL = new GenericContainer<>("amazon/dynamodb-local:latest")
             .withExposedPorts(8000)
-            .withCommand("-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory");
+            .withCommand("-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory")
+            .waitingFor(org.testcontainers.containers.wait.strategy.Wait.forListeningPort().withStartupTimeout(java.time.Duration.ofMinutes(2)));
 
     protected AmazonDynamoDB dynamoDbClient;
     protected String dynamoDbEndpoint;
@@ -60,10 +61,21 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
     void setUpDynamoDb() throws Exception {
         // Start container if not already started
         if (!DYNAMO_DB_LOCAL.isRunning()) {
+            System.out.println("Starting DynamoDB Local container...");
             DYNAMO_DB_LOCAL.start();
+            System.out.println("DynamoDB Local container started successfully");
         }
 
+        // Wait for the container to be fully ready
+        Thread.sleep(5000);
+
         dynamoDbEndpoint = "http://" + DYNAMO_DB_LOCAL.getHost() + ":" + DYNAMO_DB_LOCAL.getFirstMappedPort();
+        System.out.println("DynamoDB endpoint: " + dynamoDbEndpoint);
+        
+        // Verify container is accessible
+        if (!DYNAMO_DB_LOCAL.isRunning()) {
+            throw new RuntimeException("DynamoDB container failed to start properly");
+        }
         
         // Create DynamoDB client for test setup
         dynamoDbClient = AmazonDynamoDBClientBuilder.standard()
@@ -76,6 +88,9 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
         System.setProperty("aws.accessKeyId", "fake");
         System.setProperty("aws.secretAccessKey", "fake");
         System.setProperty("aws.region", "us-east-1");
+
+        // Test connection with retries
+        testDynamoDbConnection();
 
         // Create test tables and data
         createTestTablesAndData();
@@ -103,7 +118,7 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
     /**
      * Creates test tables and populates them with sample data
      */
-    private void createTestTablesAndData() {
+    protected void createTestTablesAndData() {
         // Create Users table
         createUsersTable();
         populateUsersTable();
@@ -326,5 +341,33 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
     protected void verifyItemNotInDb(String tableName, Map<String, AttributeValue> key) {
         Map<String, AttributeValue> item = getItemFromDb(tableName, key);
         assertThat(item).isNull();
+    }
+
+    /**
+     * Tests the DynamoDB connection with retry logic
+     */
+    private void testDynamoDbConnection() throws Exception {
+        System.out.println("Testing DynamoDB connection...");
+        int maxRetries = 15; // Increased from 10
+        long retryDelay = 2000; // Increased from 1000ms
+        
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Try to list tables - this is a simple operation that tests connectivity
+                dynamoDbClient.listTables();
+                System.out.println("DynamoDB connection successful on attempt " + attempt);
+                return;
+            } catch (Exception e) {
+                System.out.println("Connection attempt " + attempt + " failed: " + e.getMessage());
+                if (attempt == maxRetries) {
+                    throw new RuntimeException("Failed to connect to DynamoDB after " + maxRetries + " attempts", e);
+                }
+                Thread.sleep(retryDelay);
+                // Don't increase delay too much to avoid very long waits
+                if (retryDelay < 5000) {
+                    retryDelay = Math.min(retryDelay * 2, 5000);
+                }
+            }
+        }
     }
 }

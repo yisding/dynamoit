@@ -17,6 +17,10 @@
 
 package ua.org.java.dynamoit.e2e;
 
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +46,21 @@ class SmokeE2ETest extends DynamoItE2ETestBase {
     void shouldCreateAndQueryTestTables() {
         // Verify that test tables exist and contain data
         assertThat(dynamoDbClient).isNotNull();
+        
+        // Handle dynamic container recreation by checking if endpoint changed
+        String currentEndpoint = "http://" + DYNAMO_DB_LOCAL.getHost() + ":" + DYNAMO_DB_LOCAL.getFirstMappedPort();
+        
+        if (!currentEndpoint.equals(dynamoDbEndpoint)) {
+            // Container was recreated, update client and recreate tables
+            dynamoDbEndpoint = currentEndpoint;
+            dynamoDbClient = AmazonDynamoDBClientBuilder.standard()
+                    .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(dynamoDbEndpoint, "us-east-1"))
+                    .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials("fake", "fake")))
+                    .build();
+            
+            System.setProperty("aws.dynamodb.endpoint", dynamoDbEndpoint);
+            createTestTablesAndData();
+        }
         
         // Query users table
         Map<String, AttributeValue> key = new HashMap<>();
