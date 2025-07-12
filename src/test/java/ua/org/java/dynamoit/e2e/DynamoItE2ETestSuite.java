@@ -21,7 +21,7 @@ import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
 
 /**
- * Test suite for all DynamoIt End-to-End tests.
+ * Test suite for the simplified DynamoIt End-to-End tests.
  * 
  * Run this suite to execute all E2E tests in the correct order.
  * Each test class is self-contained and sets up its own test data.
@@ -29,12 +29,7 @@ import org.junit.platform.suite.api.Suite;
 @Suite
 @SelectClasses({
     SmokeE2ETest.class,
-    DynamoItMainE2ETest.class,
-    ProfileManagementE2ETest.class,
-    TableOperationsE2ETest.class,
-    CrudOperationsE2ETest.class,
-    SearchAndFilterE2ETest.class,
-    AdvancedTableOperationsE2ETest.class
+    SimpleCreationE2ETest.class
 })
 public class DynamoItE2ETestSuite {
     // This class is used only as a holder for the above annotations

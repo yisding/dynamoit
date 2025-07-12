@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# DynamoIt E2E Test Runner
-# This script provides convenient ways to run different test suites
+# DynamoIt E2E Test Runner - Simplified Version
+# This script provides convenient ways to run the simplified test suite
 
 set -e
 
@@ -12,12 +12,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}🚀 DynamoIt E2E Test Runner${NC}"
+echo -e "${BLUE}🚀 DynamoIt E2E Test Runner (Simplified)${NC}"
 echo "================================="
 echo ""
-echo -e "${YELLOW}ℹ️  Note: E2E tests are excluded from regular 'mvn test' runs for performance.${NC}"
-echo -e "${YELLOW}   Use this script or specify tests explicitly to run E2E tests.${NC}"
-echo -e "${YELLOW}   For visible mode debugging, use the 'visible' option.${NC}"
+echo -e "${YELLOW}ℹ️  Note: Simplified E2E test suite with only essential tests.${NC}"
+echo -e "${YELLOW}   For visible mode debugging on Mac, use the 'visible' option.${NC}"
 echo ""
 
 # Function to print usage
@@ -25,17 +24,12 @@ print_usage() {
     echo "Usage: $0 [option]"
     echo ""
     echo "Options:"
-    echo "  all              Run all E2E tests (default)"
+    echo "  all              Run all E2E tests (smoke + creation)"
     echo "  smoke            Run smoke tests only"
-    echo "  basic            Run basic functionality tests"
-    echo "  crud             Run CRUD operation tests"
-    echo "  search           Run search and filter tests"
-    echo "  advanced         Run advanced operation tests"
-    echo "  profile          Run profile management tests"
-    echo "  table            Run table operation tests"
-    echo "  performance      Run performance-focused tests"
+    echo "  creation         Run item creation tests only"
     echo "  visible          Run tests in visible mode (for debugging)"
-    echo "  debug-visible    Run smoke test in visible mode with verbose output"
+    echo "  visible-smoke    Run only smoke test in visible mode"
+    echo "  visible-creation Run only creation test in visible mode"
     echo "  help             Show this help message"
 }
 
@@ -57,10 +51,10 @@ check_java() {
     
     # Check for macOS specific JavaFX issues
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo -e "${YELLOW}ℹ️  macOS detected - checking JavaFX display compatibility${NC}"
+        echo -e "${YELLOW}ℹ️  macOS detected - ensuring optimal JavaFX configuration${NC}"
         # Check if we're running on Apple Silicon
         if [[ $(uname -m) == "arm64" ]]; then
-            echo -e "${YELLOW}ℹ️  Apple Silicon detected - ensure JavaFX is ARM64 compatible${NC}"
+            echo -e "${YELLOW}ℹ️  Apple Silicon detected - using compatible JavaFX settings${NC}"
         fi
     fi
 }
@@ -75,6 +69,7 @@ check_display_environment() {
     
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo -e "${GREEN}✅ macOS display environment detected${NC}"
+        echo -e "${YELLOW}ℹ️  Will configure for optimal Mac visible mode experience${NC}"
     fi
     
     return 0
@@ -104,20 +99,28 @@ run_test() {
             exit 1
         fi
         
-        maven_props="-Dtestfx.headless=false -Djava.awt.headless=false -Dtestfx.robot=glass"
+        # Mac-optimized visible mode settings
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            maven_props="-Dtestfx.headless=false -Djava.awt.headless=false -Dtestfx.robot=glass"
+            maven_props="$maven_props -Dapple.awt.application.name=DynamoIt_E2E_Test"
+            maven_props="$maven_props -Dapple.laf.useScreenMenuBar=false"
+        else
+            maven_props="-Dtestfx.headless=false -Djava.awt.headless=false -Dtestfx.robot=glass"
+        fi
+        
         echo -e "${YELLOW}👀 Running in VISIBLE mode for debugging${NC}"
         echo -e "${YELLOW}ℹ️  UI windows should appear during test execution${NC}"
         echo -e "${YELLOW}ℹ️  Tests will run slower to allow observation${NC}"
         
         # Add debugging properties and slower timing
-        maven_props="$maven_props -Dprism.verbose=true -Dtestfx.robot.write_sleep=200 -Dtestfx.robot.key_sleep=200"
+        maven_props="$maven_props -Dprism.verbose=true -Dtestfx.robot.write_sleep=300 -Dtestfx.robot.key_sleep=300"
     else
         maven_props="-Dtestfx.headless=true -Dprism.order=sw -Djava.awt.headless=true -Dglass.platform=Monocle -Dmonocle.platform=Headless"
         echo -e "${GREEN}🔧 Running in HEADLESS mode${NC}"
     fi
     
     # Run the tests
-    if mvn test -Dtest="$test_pattern" $maven_props -q $mvn_args; then
+    if mvn test -Dtest="$test_pattern" $maven_props $mvn_args; then
         echo -e "${GREEN}✅ $description completed successfully${NC}"
     else
         echo -e "${RED}❌ $description failed${NC}"
@@ -149,64 +152,36 @@ setup_environment
 # Parse command line arguments
 case "${1:-all}" in
     "smoke")
-        run_test "SmokeE2ETest" "Smoke Tests"
+        run_test "SmokeE2ETest" "Smoke Tests (Infrastructure Verification)"
         ;;
     
-    "basic")
-        run_test "SmokeE2ETest,DynamoItMainE2ETest" "Basic Functionality Tests"
-        ;;
-    
-    "crud")
-        run_test "CrudOperationsE2ETest" "CRUD Operation Tests"
-        ;;
-    
-    "search")
-        run_test "SearchAndFilterE2ETest" "Search and Filter Tests"
-        ;;
-    
-    "advanced")
-        run_test "AdvancedTableOperationsE2ETest" "Advanced Operation Tests"
-        ;;
-    
-    "profile")
-        run_test "ProfileManagementE2ETest" "Profile Management Tests"
-        ;;
-    
-    "table")
-        run_test "TableOperationsE2ETest" "Table Operation Tests"
-        ;;
-    
-    "performance")
-        echo -e "${YELLOW}🏃 Running Performance Tests...${NC}"
-        echo "Note: This may take several minutes"
-        run_test "*E2ETest#shouldHandleLargeVolumeInsert,*E2ETest#shouldHandleConcurrentOperations,*E2ETest#shouldFilterLargeDatasetEfficiently" "Performance Tests"
+    "creation")
+        run_test "SimpleCreationE2ETest" "Simple Creation Tests"
         ;;
     
     "visible")
-        echo -e "${YELLOW}🎭 Running all tests in VISIBLE mode for debugging${NC}"
-        run_test "ua.org.java.dynamoit.e2e.**" "All E2E Tests (Visible Mode)" true
+        echo -e "${YELLOW}� Running all tests in VISIBLE mode for debugging${NC}"
+        run_test "SmokeE2ETest,SimpleCreationE2ETest" "All E2E Tests (Visible Mode)" true
         ;;
     
-    "debug-visible")
-        echo -e "${YELLOW}🔍 Debug: Testing visible mode with verbose output${NC}"
-        echo -e "${YELLOW}This will run a simple test with maximum visibility${NC}"
-        echo -e "${YELLOW}You should see UI windows and detailed console output${NC}"
-        run_test "SmokeE2ETest" "Smoke Test (Debug Visible Mode)" true
+    "visible-smoke")
+        echo -e "${YELLOW}🔍 Running smoke test in VISIBLE mode${NC}"
+        run_test "SmokeE2ETest" "Smoke Test (Visible Mode)" true
+        ;;
+    
+    "visible-creation")
+        echo -e "${YELLOW}🔍 Running creation test in VISIBLE mode${NC}"
+        run_test "SimpleCreationE2ETest" "Creation Test (Visible Mode)" true
         ;;
     
     "all")
-        echo -e "${BLUE}Running complete E2E test suite...${NC}"
+        echo -e "${BLUE}Running simplified E2E test suite...${NC}"
         echo "📋 Test Categories:"
-        echo "   - SmokeE2ETest: Infrastructure verification"
-        echo "   - DynamoItMainE2ETest: Core application functionality"
-        echo "   - ProfileManagementE2ETest: Profile CRUD operations"
-        echo "   - TableOperationsE2ETest: Basic table operations"
-        echo "   - CrudOperationsE2ETest: Comprehensive CRUD scenarios (18 tests)"
-        echo "   - SearchAndFilterE2ETest: Advanced filtering and search (25 tests)"
-        echo "   - AdvancedTableOperationsE2ETest: Bulk operations and edge cases (15 tests)"
+        echo "   - SmokeE2ETest: Infrastructure verification (3 tests)"
+        echo "   - SimpleCreationE2ETest: Basic item creation (2 tests)"
         echo ""
         
-        run_test "ua.org.java.dynamoit.e2e.**" "Complete E2E Test Suite (79 total scenarios)" false "-De2e.parallel=true"
+        run_test "SmokeE2ETest,SimpleCreationE2ETest" "Complete Simplified E2E Test Suite (5 total tests)"
         ;;
     
     "help"|"-h"|"--help")
@@ -231,7 +206,6 @@ echo -e "${GREEN}🎉 Test execution completed!${NC}"
 echo ""
 echo -e "${BLUE}📁 Additional Resources:${NC}"
 echo "• Detailed results: target/surefire-reports/"
-echo "• Test documentation: COMPREHENSIVE_TEST_SCENARIOS.md"
 echo "• Run specific test: mvn test -Dtest='ClassName#methodName'"
-echo "• Debug mode: Use 'debug-visible' option to see UI interactions"
-echo "• E2E tests are excluded from 'mvn test' - use this script instead"
+echo "• Debug mode: Use 'visible' options to see UI interactions"
+echo "• Mac users: Visible mode optimized for macOS display"

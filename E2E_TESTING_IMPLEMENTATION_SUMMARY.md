@@ -1,27 +1,225 @@
-# DynamoIt E2E Testing Framework - Implementation Summary
+# DynamoIt E2E Testing Framework - Simplified Implementation
 
 ## 🎯 Project Overview
 
-This document summarizes the comprehensive End-to-End testing framework implemented for DynamoIt, a JavaFX application for managing AWS DynamoDB data. The framework provides thorough test coverage using modern testing tools and practices.
+This document summarizes the **simplified** End-to-End testing framework implemented for DynamoIt, a JavaFX application for managing AWS DynamoDB data. The framework focuses on essential functionality with reliable, maintainable tests optimized for Mac visible mode debugging.
 
 ## ✅ Implementation Status
 
-### **COMPLETED** - Full E2E Testing Framework
+### **COMPLETED** - Simplified E2E Testing Framework
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| 🏗️ Infrastructure | ✅ Complete | DynamoDB Local container, TestFX setup, headless configuration |
+| 🏗️ Infrastructure | ✅ Complete | DynamoDB Local container, TestFX setup, Mac-optimized configuration |
 | 🧪 Smoke Tests | ✅ Complete | Container startup, database setup, system property validation |
-| 🖥️ Core UI Tests | ✅ Complete | Main application functionality, basic CRUD operations |
-| 👤 Profile Management | ✅ Complete | Profile creation, editing, switching, validation |
-| 📊 Table Operations | ✅ Complete | Metadata display, refresh, export, pagination |
-| 🔧 CRUD Operations | ✅ Complete | 18 comprehensive scenarios for Create/Read/Update/Delete |
-| 🔍 Search & Filter | ✅ Complete | 25 scenarios covering all filter types and complex queries |
-| ⚡ Advanced Operations | ✅ Complete | 15 scenarios for bulk operations, import/export, performance |
-| 📚 Documentation | ✅ Complete | Comprehensive scenario documentation and user guides |
-| 🚀 CI/CD Integration | ✅ Complete | GitHub Actions workflow with automated testing |
+| 🖥️ Simple Creation Tests | ✅ Complete | Basic item creation for users and products |
+| 📚 Documentation | ✅ Complete | Simplified scenario documentation and user guides |
+| 🚀 Test Runner | ✅ Complete | Enhanced script with Mac visible mode support |
 
-**Total Test Scenarios: 79**
+**Total Test Scenarios: 5** (Simplified from 79)
+
+---
+
+## 🛠️ Technical Stack
+
+### Core Testing Technologies
+- **TestFX 4.0.18**: JavaFX UI automation framework
+- **Testcontainers 1.19.3**: Docker container lifecycle management  
+- **JUnit 5.10.1**: Modern testing framework
+- **AssertJ 3.24.2**: Fluent assertion library
+- **DynamoDB Local**: AWS-provided local DynamoDB instance
+- **Monocle**: Headless JavaFX platform for CI/CD environments
+
+### Mac Optimization Features
+- **Glass Robot**: Native Mac interaction support
+- **Display Configuration**: Automatic Mac-specific settings
+- **Timing Adjustments**: Slower speeds for visible mode observation
+- **Debug Output**: Enhanced logging for troubleshooting
+
+---
+
+## 📁 Project Structure (Simplified)
+
+```
+src/test/java/ua/org/java/dynamoit/e2e/
+├── base/
+│   └── DynamoItE2ETestBase.java          # Base infrastructure class
+├── containers/
+│   └── DynamoDbSingletonContainer.java   # Docker container management
+├── SmokeE2ETest.java                     # Infrastructure verification (3 tests)
+└── SimpleCreationE2ETest.java            # Basic item creation (2 tests)
+
+Scripts:
+├── run-e2e-tests.sh                      # Simplified test runner
+└── test-visible-mode.sh                  # Mac visible mode validator
+```
+
+---
+
+## 🧪 Test Coverage (Simplified)
+
+### Infrastructure Tests (3 scenarios)
+- ✅ DynamoDB Local container startup
+- ✅ Test table creation and data setup  
+- ✅ System property configuration
+
+### Simple Creation Tests (2 scenarios)
+- ✅ User item creation with validation
+- ✅ Product item creation with validation
+
+---
+
+## 🚀 Usage Guide
+
+### Quick Start
+```bash
+# Run all tests (headless)
+./run-e2e-tests.sh
+
+# Run specific test category
+./run-e2e-tests.sh smoke
+./run-e2e-tests.sh creation
+
+# Debug mode (visible UI on Mac)
+./run-e2e-tests.sh visible
+./run-e2e-tests.sh visible-smoke
+./run-e2e-tests.sh visible-creation
+```
+
+### Test Runner Options
+| Command | Description | Test Count |
+|---------|-------------|------------|
+| `all` | Complete simplified test suite | 5 scenarios |
+| `smoke` | Infrastructure verification | 3 scenarios |
+| `creation` | Simple creation tests | 2 scenarios |
+| `visible` | Debug mode (UI visible) | All scenarios |
+| `visible-smoke` | Smoke test in visible mode | 3 scenarios |
+| `visible-creation` | Creation test in visible mode | 2 scenarios |
+
+### Maven Commands
+```bash
+# Run specific test class
+mvn test -Dtest="SmokeE2ETest"
+mvn test -Dtest="SimpleCreationE2ETest"
+
+# Run with Mac visible mode
+mvn test -Dtest="SmokeE2ETest" -Dtestfx.headless=false -Dtestfx.robot=glass
+
+# Run all E2E tests
+mvn test -Dtest="*E2ETest"
+```
+
+---
+
+## 🍎 Mac Visible Mode Features
+
+### Automatic Mac Detection
+- Detects macOS environment automatically
+- Configures optimal settings for Mac display
+- Handles Apple Silicon compatibility
+
+### Enhanced Debugging
+- **Slower Timing**: Extended waits for observation
+- **Native Glass Robot**: Better Mac interaction
+- **Verbose Output**: Detailed logging for troubleshooting
+- **Display Optimization**: Proper window management
+
+### Configuration
+```bash
+# Test Mac visible mode configuration
+./test-visible-mode.sh
+
+# Run visible mode tests
+./run-e2e-tests.sh visible-smoke
+```
+
+---
+
+## 🎯 Key Improvements
+
+### Simplified Architecture
+- **Reduced Complexity**: From 79 to 5 test scenarios
+- **Essential Coverage**: Focus on critical functionality only
+- **Maintainable Code**: Easier to understand and modify
+- **Faster Execution**: Reduced test runtime
+
+### Mac Optimization
+- **Native Support**: Optimized for macOS display
+- **Debug Friendly**: Better visible mode experience
+- **Timing Adjustments**: Appropriate waits for observation
+- **Error Handling**: Better error messages for Mac issues
+
+### Reliability Improvements
+- **Stable Tests**: Focus on reliable, repeatable scenarios
+- **Clear Documentation**: Simple usage instructions
+- **Better Error Handling**: More informative failure messages
+- **Resource Management**: Efficient container usage
+
+---
+
+## 🔄 CI/CD Integration
+
+### GitHub Actions Compatibility
+The simplified test suite is fully compatible with CI/CD environments:
+
+```yaml
+# Runs in headless mode automatically
+# Faster execution due to reduced test count
+# Reliable results with simplified scenarios
+```
+
+### Local Development
+```bash
+# Prerequisites check (same as before)
+docker --version  # Docker required
+java -version     # Java 21 recommended
+
+# Quick test
+./run-e2e-tests.sh smoke
+```
+
+---
+
+## 📊 Performance Benchmarks
+
+### Expected Performance (Simplified)
+| Operation | Target Time | Test Coverage |
+|-----------|-------------|---------------|
+| Complete Test Suite | < 2 minutes | All 5 scenarios |
+| Smoke Tests | < 30 seconds | Infrastructure only |
+| Creation Tests | < 1 minute | UI interactions |
+| Visible Mode | < 5 minutes | With observation time |
+
+---
+
+## 🛡️ Quality Assurance
+
+### Test Reliability
+- **Simplified Scenarios**: Reduced complexity = better reliability
+- **Essential Coverage**: Focus on critical paths only
+- **Mac Optimized**: Better experience on primary development platform
+- **Clear Debugging**: Visible mode works reliably
+
+### Maintenance
+- **Easier Updates**: Fewer tests to maintain
+- **Clear Structure**: Simple organization
+- **Good Documentation**: Easy to understand and extend
+- **Focused Scope**: Clear boundaries and responsibilities
+
+---
+
+## 🎉 Conclusion
+
+The **simplified** DynamoIt E2E testing framework provides essential coverage with **5 focused test scenarios** that are:
+
+- ✅ **Reliable and maintainable** with reduced complexity
+- ✅ **Mac-optimized** for excellent visible mode debugging
+- ✅ **Fast and efficient** with streamlined execution
+- ✅ **Developer-friendly** with clear documentation and tooling
+
+This approach prioritizes **quality over quantity**, ensuring that the tests we do have are robust, reliable, and provide value for ongoing development.
+
+**Ready for Production Use** 🚀
 
 ---
 

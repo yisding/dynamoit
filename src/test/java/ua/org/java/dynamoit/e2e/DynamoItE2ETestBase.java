@@ -101,11 +101,52 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
 
     @Override
     public void start(Stage stage) throws Exception {
+        // Check if we're running in visible mode on Mac and configure accordingly
+        configureForMacVisibleMode();
+        
         // Start the DynamoIt application
         new DynamoItApp().start(stage);
         
         // Give the UI more time to fully initialize and render
-        Thread.sleep(5000);  // Increased from 2000ms to 5000ms
+        // Longer delay for visible mode to allow manual observation
+        boolean isVisible = !Boolean.parseBoolean(System.getProperty("testfx.headless", "true"));
+        Thread.sleep(isVisible ? 8000 : 3000);
+    }
+
+    /**
+     * Configure system properties for optimal Mac visible mode experience
+     */
+    private void configureForMacVisibleMode() {
+        boolean isVisible = !Boolean.parseBoolean(System.getProperty("testfx.headless", "true"));
+        boolean isMac = System.getProperty("os.name").toLowerCase().contains("mac");
+        
+        if (isVisible && isMac) {
+            System.out.println("Configuring for Mac visible mode...");
+            
+            // Ensure we're not forcing headless mode
+            System.setProperty("java.awt.headless", "false");
+            System.setProperty("testfx.headless", "false");
+            
+            // Use native Glass platform for better Mac compatibility
+            System.setProperty("glass.platform", "");
+            System.setProperty("monocle.platform", "");
+            
+            // Set robot for better Mac interaction
+            System.setProperty("testfx.robot", "glass");
+            
+            // Slower interaction speeds for visible debugging
+            System.setProperty("testfx.robot.write_sleep", "300");
+            System.setProperty("testfx.robot.key_sleep", "300");
+            
+            // Enable verbose output for debugging
+            System.setProperty("prism.verbose", "true");
+            
+            // Ensure proper display on Mac
+            System.setProperty("apple.awt.application.name", "DynamoIt E2E Test");
+            System.setProperty("apple.laf.useScreenMenuBar", "false");
+            
+            System.out.println("Mac visible mode configuration complete");
+        }
     }
 
     /**
@@ -232,9 +273,21 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
 
     /**
      * Utility method to wait for UI operations to complete
+     * Automatically adjusts timing based on visible/headless mode
      */
     protected void waitForUi() throws InterruptedException {
-        Thread.sleep(1500);  // Increased from 500ms to 1500ms
+        boolean isVisible = !Boolean.parseBoolean(System.getProperty("testfx.headless", "true"));
+        Thread.sleep(isVisible ? 2000 : 1000);  // Longer waits in visible mode
+    }
+
+    /**
+     * Wait for UI with custom timeout
+     */
+    protected void waitForUi(long milliseconds) throws InterruptedException {
+        boolean isVisible = !Boolean.parseBoolean(System.getProperty("testfx.headless", "true"));
+        // In visible mode, extend the wait time for better observation
+        long actualWait = isVisible ? (long)(milliseconds * 1.5) : milliseconds;
+        Thread.sleep(actualWait);
     }
 
     /**
@@ -284,13 +337,6 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
         } catch (Exception e) {
             return java.util.Collections.emptyList();
         }
-    }
-
-    /**
-     * Wait for UI with custom timeout
-     */
-    protected void waitForUi(long milliseconds) throws InterruptedException {
-        Thread.sleep(milliseconds);
     }
 
     /**
