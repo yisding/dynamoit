@@ -259,6 +259,19 @@
                 </plugins>
             </build>
         </profile>
+        
+        <!-- Profile for running TestFX tests in visible mode -->
+        <profile>
+            <id>testfx-visible</id>
+            <properties>
+                <testfx.headless>false</testfx.headless>
+                <prism.order>d3d,es2,sw</prism.order>
+                <java.awt.headless>false</java.awt.headless>
+                <!-- Don't set glass.platform, let JavaFX choose -->
+                <glass.platform></glass.platform>
+                <monocle.platform></monocle.platform>
+            </properties>
+        </profile>
     </profiles>
 
     <dependencies>

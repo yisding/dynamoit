@@ -23,6 +23,7 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.input.KeyCode;
 import org.junit.jupiter.api.Test;
 import org.testfx.api.FxRobot;
+import ua.org.java.dynamoit.e2e.containers.DynamoDbSingletonContainer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -48,8 +49,8 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         robot.doubleClickOn("users");
         waitForUi();
         
-        // Click "Add Item" or "New Item" button
-        robot.clickOn("Add Item");
+        // Click "Create a new document" button (icon-only button with tooltip)
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         
         // Fill in complete user data
@@ -87,7 +88,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         robot.doubleClickOn("users");
         waitForUi();
         
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         
         // Only fill required fields
@@ -117,7 +118,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         robot.doubleClickOn("products");
         waitForUi();
         
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         
         // Fill composite key (productId + category)
@@ -151,7 +152,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         robot.doubleClickOn("users");
         waitForUi();
         
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         
         // Try to create with existing ID
@@ -427,7 +428,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         waitForUi();
         
         // Create first user
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         robot.write("bulk-1");
         robot.press(KeyCode.TAB);
@@ -436,7 +437,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         waitForUi();
         
         // Create second user
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         robot.write("bulk-2");
         robot.press(KeyCode.TAB);
@@ -445,7 +446,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         waitForUi();
         
         // Create third user
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         robot.write("bulk-3");
         robot.press(KeyCode.TAB);
@@ -476,7 +477,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         robot.doubleClickOn("users");
         waitForUi();
         
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         
         // Try to save without required ID field
@@ -505,7 +506,7 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
         robot.doubleClickOn("users");
         waitForUi();
         
-        robot.clickOn("Add Item");
+        clickCreateNewDocumentButton(robot);
         waitForUi();
         
         // Use special characters and unicode
@@ -531,6 +532,12 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
     // ===========================================
     // HELPER METHODS
     // ===========================================
+    
+    private void clickCreateNewDocumentButton(FxRobot robot) {
+        // Click the "Create a new document" button (icon-only button with tooltip)
+        robot.clickOn(robot.lookup((Button button) -> button.getTooltip() != null && 
+            button.getTooltip().getText().contains("Create a new document")).queryButton());
+    }
 
     private void setupLocalProfile(FxRobot robot) throws InterruptedException {
         waitForUi();
@@ -686,5 +693,59 @@ class CrudOperationsE2ETest extends DynamoItE2ETestBase {
             }
         }
         waitForUi();
+    }
+    
+    // ===========================================
+    // DEBUG TEST - Discover UI Elements
+    // ===========================================
+    
+    @Test
+    void debugDiscoverUIElements() throws InterruptedException {
+        FxRobot robot = new FxRobot();
+        setupLocalProfile(robot);
+        
+        // Open users table
+        robot.doubleClickOn("users");
+        waitForUi();
+        
+        System.out.println("=== DEBUG: Discovering UI Elements ===");
+        
+        // Look for all buttons
+        try {
+            var buttons = robot.lookup(".button").queryAllAs(Button.class);
+            System.out.println("Found " + buttons.size() + " buttons:");
+            for (Button button : buttons) {
+                System.out.println("  - Button text: '" + button.getText() + "'");
+                if (button.getTooltip() != null) {
+                    System.out.println("    Tooltip: '" + button.getTooltip().getText() + "'");
+                }
+            }
+        } catch (Exception ex) {
+            System.out.println("Could not query buttons: " + ex.getMessage());
+        }
+        
+        // Look for menu items
+        try {
+            var menuItems = robot.lookup(".menu-item").queryAll();
+            System.out.println("Found " + menuItems.size() + " menu items");
+        } catch (Exception ex) {
+            System.out.println("Could not query menu items: " + ex.getMessage());
+        }
+        
+        // Look for toolbar elements
+        try {
+            var toolbarButtons = robot.lookup(".tool-bar .button").queryAllAs(Button.class);
+            System.out.println("Found " + toolbarButtons.size() + " toolbar buttons:");
+            for (Button button : toolbarButtons) {
+                System.out.println("  - Toolbar Button text: '" + button.getText() + "'");
+            }
+        } catch (Exception ex) {
+            System.out.println("Could not query toolbar buttons: " + ex.getMessage());
+        }
+        
+        System.out.println("=== DEBUG: UI Discovery Complete ===");
+        
+        // Take a screenshot if possible
+        Thread.sleep(10000); // Wait 10 seconds so you can see the UI
     }
 }
