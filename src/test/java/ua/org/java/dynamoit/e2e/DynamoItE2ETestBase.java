@@ -27,11 +27,9 @@ import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testfx.framework.junit5.ApplicationTest;
 import ua.org.java.dynamoit.DynamoItApp;
+import ua.org.java.dynamoit.e2e.containers.DynamoDbSingletonContainer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,41 +39,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Base class for DynamoIt End-to-End tests.
  * Sets up DynamoDB Local in a Docker container and provides test utilities.
+ * Uses a singleton container pattern for improved performance.
  */
-@Testcontainers
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class DynamoItE2ETestBase extends ApplicationTest {
 
     protected String testProfileName = "test-local-" + this.getClass().getSimpleName();
-
-    @Container
-    protected final GenericContainer<?> DYNAMO_DB_LOCAL = new GenericContainer<>("amazon/dynamodb-local:latest")
-            .withExposedPorts(8000)
-            .withCommand("-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory")
-            .waitingFor(org.testcontainers.containers.wait.strategy.Wait.forListeningPort().withStartupTimeout(java.time.Duration.ofMinutes(2)));
 
     protected AmazonDynamoDB dynamoDbClient;
     protected String dynamoDbEndpoint;
 
     @BeforeAll
     void setUpDynamoDb() throws Exception {
-        // Start container if not already started
-        if (!DYNAMO_DB_LOCAL.isRunning()) {
-            System.out.println("Starting DynamoDB Local container...");
-            DYNAMO_DB_LOCAL.start();
-            System.out.println("DynamoDB Local container started successfully");
+        // Verify singleton container is running
+        if (!DynamoDbSingletonContainer.isRunning()) {
+            throw new RuntimeException("DynamoDB singleton container is not running");
         }
-
-        // Wait for the container to be fully ready
-        Thread.sleep(5000);
-
-        dynamoDbEndpoint = "http://" + DYNAMO_DB_LOCAL.getHost() + ":" + DYNAMO_DB_LOCAL.getFirstMappedPort();
-        System.out.println("DynamoDB endpoint: " + dynamoDbEndpoint);
         
-        // Verify container is accessible
-        if (!DYNAMO_DB_LOCAL.isRunning()) {
-            throw new RuntimeException("DynamoDB container failed to start properly");
-        }
+        // Wait for the container to be fully ready
+        Thread.sleep(2000);
+
+        dynamoDbEndpoint = DynamoDbSingletonContainer.getEndpoint();
+        System.out.println("DynamoDB endpoint: " + dynamoDbEndpoint);
         
         // Create DynamoDB client for test setup
         dynamoDbClient = AmazonDynamoDBClientBuilder.standard()
@@ -103,7 +88,15 @@ public abstract class DynamoItE2ETestBase extends ApplicationTest {
             cleanupTestTables();
             dynamoDbClient.shutdown();
         }
-        DYNAMO_DB_LOCAL.stop();
+        
+        // Clear system properties
+        System.clearProperty("aws.dynamodb.endpoint");
+        System.clearProperty("aws.accessKeyId");
+        System.clearProperty("aws.secretAccessKey");
+        System.clearProperty("aws.region");
+        
+        System.out.println("DynamoDB client and properties cleaned up");
+        // Note: We don't stop the singleton container - it stays running for other test classes
     }
 
     @Override

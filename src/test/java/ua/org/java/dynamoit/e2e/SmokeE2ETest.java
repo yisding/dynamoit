@@ -17,12 +17,9 @@
 
 package ua.org.java.dynamoit.e2e;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.model.AttributeValue;
 import org.junit.jupiter.api.Test;
+import ua.org.java.dynamoit.e2e.containers.DynamoDbSingletonContainer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -36,8 +33,8 @@ class SmokeE2ETest extends DynamoItE2ETestBase {
 
     @Test
     void shouldStartDynamoDbLocalContainer() {
-        // Verify that the DynamoDB Local container is running
-        assertThat(DYNAMO_DB_LOCAL.isRunning()).isTrue();
+        // Verify that the DynamoDB Local singleton container is running
+        assertThat(DynamoDbSingletonContainer.isRunning()).isTrue();
         assertThat(dynamoDbEndpoint).isNotNull();
         assertThat(dynamoDbEndpoint).startsWith("http://");
     }
@@ -47,20 +44,8 @@ class SmokeE2ETest extends DynamoItE2ETestBase {
         // Verify that test tables exist and contain data
         assertThat(dynamoDbClient).isNotNull();
         
-        // Handle dynamic container recreation by checking if endpoint changed
-        String currentEndpoint = "http://" + DYNAMO_DB_LOCAL.getHost() + ":" + DYNAMO_DB_LOCAL.getFirstMappedPort();
-        
-        if (!currentEndpoint.equals(dynamoDbEndpoint)) {
-            // Container was recreated, update client and recreate tables
-            dynamoDbEndpoint = currentEndpoint;
-            dynamoDbClient = AmazonDynamoDBClientBuilder.standard()
-                    .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(dynamoDbEndpoint, "us-east-1"))
-                    .withCredentials(new AWSStaticCredentialsProvider(new BasicAWSCredentials("fake", "fake")))
-                    .build();
-            
-            System.setProperty("aws.dynamodb.endpoint", dynamoDbEndpoint);
-            createTestTablesAndData();
-        }
+        // Singleton container endpoint is stable, no need to check for recreation
+        assertThat(dynamoDbEndpoint).isEqualTo(DynamoDbSingletonContainer.getEndpoint());
         
         // Query users table
         Map<String, AttributeValue> key = new HashMap<>();
